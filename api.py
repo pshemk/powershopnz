@@ -495,27 +495,50 @@ class PowershopApiClient:
         rates_data =  await self._run_query(
             QUERY_RATES, {"accountNumber": account_id, "propertyId": property_id}
         )
-        final_rates = {}
+        rate_types = {}
         meter_points = rates_data.get("account", {}).get("property", {}).get("meterPoints", {})
         if not meter_points or len(meter_points) == 0: 
-            _LOGGER.warning("Can not find any meters!")
+            _LOGGER.warning("Can not find any meters")
             return {}
         rates = meter_points[0].get("activeAgreement", {}).get("rates", {})
         if not rates or len(rates) == 0:
-            _LOGGER.warning("Can not find any rates!")
+            _LOGGER.warning("Can not find any rates")
             return {}
         for rate in rates:
-            if rate.get("displayLabel") in final_rates.keys():
-                #check that the rate and bucket is the same
-                if float(rate.get("rateIncludingTax"))/100 != final_rates[rate.get("displayLabel")]["rate"] or  rate.get("touBucketName") != final_rates[rate.get("displayLabel")]["bucket"]:
-                    _LOGGER.warning(f"Inconsistent rates for {rate}")
-            else:
-                final_rates[rate.get("displayLabel")] = {
+            if rate.get("touBucketName"):            
+                if rate.get("touBucketName") in rate_types.keys():
+                    #check that the rate and bucket are the same
+                    if float(rate.get("rateIncludingTax"))/100 != rate_types[rate.get("displayLabel").replace(" ", "_").lower()]["rate"] or rate.get("displayLabel") != rate_types[rate.get("touBucketName")]["name"]:
+                        _LOGGER.warning(f"Inconsistent rates for {rate}")
+                else:
+                    rate_types[rate.get("displayLabel").replace(" ", "_").lower()] = {
+                        "name": rate.get("displayLabel"),
+                        "bucket": rate.get("touBucketName"),
+                        "rate": float(rate.get("rateIncludingTax"))/100,
+                    }
+        return rate_types
+
+    async def get_rates(self, account_id: str, property_id: str) -> dict[str, Any]:
+        rates_data =  await self._run_query(
+            QUERY_RATES, {"accountNumber": account_id, "propertyId": property_id}
+        )
+        final_rates = {}
+        meter_points = rates_data.get("account", {}).get("property", {}).get("meterPoints", {})
+        if not meter_points or len(meter_points) == 0: 
+            _LOGGER.warning("Can not find any meters")
+            return {}
+        rates = meter_points[0].get("activeAgreement", {}).get("rates", {})
+        if not rates or len(rates) == 0:
+            _LOGGER.warning("Can not find any rates")
+            return {}
+        for rate in rates:
+                final_rates[rate.get("displayLabel").replace(" ", "_").lower()] = {
+                    "name": rate.get("displayLabel"),
                     "type": rate.get("bandCategory"),
-                    "bucket": rate.get("touBucketName"),
                     "rate": float(rate.get("rateIncludingTax"))/100,    #originally in cents
                 }
         return final_rates
+
 
     async def get_powerpacks_balances(self, account_id: str) -> dict[str, Any]:
         balances_data = await self._run_query(
@@ -561,30 +584,30 @@ class PowershopApiClient:
         return powerpacks_data
             
 
-    async def get_rates(self, account_id: str, property_id: str) -> dict[str, Any]:
-        rates_data =  await self._run_query(
-            QUERY_RATES, {"accountNumber": account_id, "propertyId": property_id}
-        )
-        meter_points = rates_data.get("account", {}).get("property", {}).get("meterPoints", {})
-        if not meter_points or len(meter_points) == 0: 
-            return {}
-        rate_specs = meter_points[0].get("activeAgreement", {}).get("rates", {})
-        if not rate_specs or len(rate_specs) == 0:
-            return {}
-        rates = {}
-        for rate_spec in rate_specs:
-            rates['unit_cost_' + rate_spec.get("displayLabel").lower().replace(" ", "_")] = float(rate_spec.get("rateIncludingTax"))/100
+    # async def get_rates(self, account_id: str, property_id: str) -> dict[str, Any]:
+    #     rates_data =  await self._run_query(
+    #         QUERY_RATES, {"accountNumber": account_id, "propertyId": property_id}
+    #     )
+    #     meter_points = rates_data.get("account", {}).get("property", {}).get("meterPoints", {})
+    #     if not meter_points or len(meter_points) == 0: 
+    #         return {}
+    #     rate_specs = meter_points[0].get("activeAgreement", {}).get("rates", {})
+    #     if not rate_specs or len(rate_specs) == 0:
+    #         return {}
+    #     rates = {}
+    #     for rate_spec in rate_specs:
+    #         rates['unit_cost_' + rate_spec.get("displayLabel").lower().replace(" ", "_")] = float(rate_spec.get("rateIncludingTax"))/100
         
-        _LOGGER.debug(f"get_rates: {rates}")
-        return rates
+    #     _LOGGER.debug(f"get_rates: {rates}")
+    #     return rates
 
     async def get_rates_schedule(self, account_id: str, property_id: str) -> dict[str, Any]:
 
         rate_types = await self.get_rate_types(account_id, property_id)
         buckets = {}
 
-        for rate_type in rate_types.keys():
-            buckets[rate_types[rate_type]["bucket"]] = "unit_cost_" + rate_type.lower().replace(" ", "_")
+        for rate_name, rate_type in rate_types.items():
+            buckets[rate_type["bucket"]] = rate_name
         _LOGGER.debug(f"buckets: {buckets}")    
         
         rates_data =  await self._run_query(
