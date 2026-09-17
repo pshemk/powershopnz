@@ -1,0 +1,14 @@
+{
+  "domain": "powershopnz",
+  "name": "Powershop NZ",
+  "version": "0.1.0",
+  "config_flow": true,
+  "documentation": "https://github.com/example/ha-powershopnz",
+  "requirements": [
+    "homeassistant-historical-sensor==3.0.0a5"
+  ],
+  "iot_class": "cloud_polling",
+   "dependencies": [
+    "statistics"
+   ]
+}
