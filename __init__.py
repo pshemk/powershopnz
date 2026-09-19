@@ -13,8 +13,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers import entity_registry as er
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    CONF_ACCOUNT_ID,
+    SENSORS_GROUPS_MAP,
+)
 from .coordinator import PowershopCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,12 +36,12 @@ PLATFORMS: list[Platform] = [
 type PowershopConfigEntry = ConfigEntry[RuntimeData]
 
 
-@dataclass
+@datacla
 class RuntimeData:
     """Class to hold your data."""
 
     coordinator: DataUpdateCoordinator
-    cancel_update_listener: Callable
+    # cancel_update_listener: Callable
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: PowershopConfigEntry) -> bool:
@@ -44,6 +49,22 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: PowershopConfigEn
 
     _LOGGER.debug("async setup entry")
 
+    enabled_groups = config_entry.options
+    registry = er.async_get(hass)
+
+    for entity in er.async_entries_for_config_entry(
+        registry,
+        config_entry.entry_id,
+    ):
+        group = _sensor_group_from_unique_id(
+            entity.unique_id,
+            config_entry.data[CONF_ACCOUNT_ID],
+        )
+
+        if group and enabled_groups.get(group) is False:
+            _LOGGER.debug(f"removing entity: {entity.entity_id}")
+            registry.async_remove(entity.entity_id)    
+  
     coordinator = PowershopCoordinator(hass, config_entry)
 
     await coordinator.async_load_stores()
@@ -53,11 +74,20 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: PowershopConfigEn
     # async_config_entry_first_refresh() is special in that it does not log errors
     # if it fails.
     # ----------------------------------------------------------------------------
-    await coordinator.async_config_entry_first_refresh()
-    
-    # coordinator.start_usage_update()
+    # ----------------------------------------------------------------------------
+    # Initialise a listener for config flow options changes.
+    # This will be removed automatically if the integraiton is unloaded.
+    # See config_flow for defining an options setting that shows up as configure
+    # on the integration.
+    # If you do not want any config flow options, no need to have listener.
+    # ----------------------------------------------------------------------------
 
-    
+    # cancel_update_listener = config_entry.async_on_unload(
+    #     config_entry.add_update_listener(_async_update_listener)
+    # )
+
+    await coordinator.async_config_entry_first_refresh()
+        
     # ----------------------------------------------------------------------------
     # Test to see if api initialised correctly, else raise ConfigNotReady to make
     # HA retry setup.
@@ -68,21 +98,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: PowershopConfigEn
     #     raise ConfigEntryNotReady
 
     # ----------------------------------------------------------------------------
-    # Initialise a listener for config flow options changes.
-    # This will be removed automatically if the integraiton is unloaded.
-    # See config_flow for defining an options setting that shows up as configure
-    # on the integration.
-    # If you do not want any config flow options, no need to have listener.
-    # ----------------------------------------------------------------------------
-    cancel_update_listener = config_entry.async_on_unload(
-        config_entry.add_update_listener(_async_update_listener)
-    )
-
-    # ----------------------------------------------------------------------------
     # Add the coordinator and update listener to your config entry to make
     # accessible throughout your integration
     # ----------------------------------------------------------------------------
-    config_entry.runtime_data = RuntimeData(coordinator, cancel_update_listener)
+    config_entry.runtime_data = RuntimeData(coordinator)
 
     # ----------------------------------------------------------------------------
     # Setup platforms (based on the list of entity types in PLATFORMS defined above)
@@ -101,14 +120,53 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: PowershopConfigEn
     # Return true to denote a successful setup.
     return True
 
+def _sensor_group_from_unique_id( unique_id: str, account_id: str ) -> str | None:
+    prefix = f"{DOMAIN}_{account_id}_"
 
-async def _async_update_listener(hass: HomeAssistant, config_entry: ConfigEntry):
-    """Handle config options update.
+    if not unique_id.startswith(prefix):
+        return None
 
-    Reload the integration when the options change.
-    Called from our listener created above.
-    """
-    await hass.config_entries.async_reload(config_entry.entry_id)
+    sensor_key = unique_id.removeprefix(prefix)
+    
+    return next(
+        (
+            group
+            for key, group in SENSORS_GROUPS_MAP.items()
+            if  key in sensor_key 
+        ),
+        None,
+    )      
+
+# async def _async_update_listener(hass: HomeAssistant, config_entry: ConfigEntry):
+#     """Handle config options update.
+
+#     Reload the integration when the options change.
+#     Called from our listener created above.
+#     """
+
+#     _LOGGER.debug(
+#         "Config entry updated: options=%s",
+#         config_entry.options,
+#     )    
+
+#     _LOGGER.debug("in async update listener")
+#     enabled_groups = config_entry.options
+#     registry = er.async_get(hass)
+
+#     for entity in er.async_entries_for_config_entry(
+#         registry,
+#         config_entry.entry_id,
+#     ):
+#         group = _sensor_group_from_unique_id(
+#             entity.unique_id,
+#             config_entry.data[CONF_ACCOUNT_ID],
+#         )
+
+#         if group and enabled_groups.get(group) is False:
+#             _LOGGER.debug(f"removing entity: {entity.entity_id}")
+#             registry.async_remove(entity.entity_id)    
+
+#     await hass.config_entries.async_reload(config_entry.entry_id)
 
 
 async def async_remove_config_entry_device(
@@ -136,3 +194,5 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: PowershopConfigE
 
     # Unload platforms and return result
     return await hass.config_entries.async_unload_platforms(config_entry, PLATFORMS)
+
+

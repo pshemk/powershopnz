@@ -687,7 +687,7 @@ class PowershopApiClient:
         
         return {
             "usage": usage_data,
-            "last_usage_timestamp": self._billing_day_start(last_timestamp) if last_timestamp else self._billing_day_start(startOn)
+            "last_usage_date": self._billing_day_start(last_timestamp) if last_timestamp else self._billing_day_start(startOn)
         }
 
     async def get_billing_dates(self, account_id: str) -> dict[str, Any]:

@@ -5,7 +5,10 @@ from typing import Any, Dict, Mapping, Optional
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.helpers import selector
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.config_entries import OptionsFlowWithReload
+
 
 from .api import AuthError, OTPError, PowershopApiClient
 from .const import (
@@ -14,6 +17,9 @@ from .const import (
     CONF_PROPERTY_ID,
     CONF_PROPERTY_ADDRESS,
     CONF_REFRESH_TOKEN,
+    CONF_SENSOR_GROUPS,
+    CONF_ENABLED_SENSORS,
+    CONF_SENSOR_GROUPS,
     DOMAIN,
 )
 
@@ -30,6 +36,11 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._client = PowershopApiClient()
         self.user_info = {}
 
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Return the options flow."""
+        return PowershopOptionsFlow()
 
     async def async_step_user(
         self, user_input: Optional[Dict[str, Any]] = None
@@ -104,24 +115,13 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
 
             #find the account_id from the property_id
-            property_id = user_input["property_id"]
-            account_id = [ property["account_id"] for property in self.user_info["properties"] if property["property_id"] == property_id ][0]
-            property_address = [ property["address"] for property in self.user_info["properties"] if property["property_id"] == property_id ][0]
+            self.user_info["property_id"] = user_input["property_id"]
+            self.user_info["account_id"] = [ property["account_id"] for property in self.user_info["properties"] if property["property_id"] == user_input["property_id"] ][0]
+            self.user_info["property_address"] = [ property["address"] for property in self.user_info["properties"] if property["property_id"] == user_input["property_id"] ][0]
             _LOGGER.debug(f"user_info: {self.user_info}")
-            _LOGGER.debug(f"account_id: {account_id} {property_id} {property_address}")
 
-            _LOGGER.debug("creating entry")
+            return await self.async_step_sensors()
 
-            return self.async_create_entry(
-                title=f"Powershop NZ",
-                data={
-                    CONF_EMAIL: self._email,
-                    CONF_REFRESH_TOKEN: self.user_info["refresh_token"],
-                    CONF_ACCOUNT_ID: account_id,
-                    CONF_PROPERTY_ID: property_id,
-                    CONF_PROPERTY_ADDRESS: property_address,
-                },
-            )
 
         return self.async_show_form(
             step_id="properties",
@@ -131,13 +131,47 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         property["property_id"]: property["address"] for property in self.user_info["properties"]
                     }
                 ),
-                vol.Optional(CONF_PROPERTY_NAME): str
-
             }),
             errors=errors,
         )
 
-        
+    async def async_step_sensors(self, user_input: Optional[Dict[str, Any]] = None
+    ) -> FlowResult:
+        errors: Dict[str, str] = {}
+        if user_input is not None:
+
+            #find the account_id from the property_id
+            _LOGGER.debug(f"user_info: {self.user_info}")
+            _LOGGER.debug(f"user_input: {user_input}")
+
+            _LOGGER.debug("creating entry")
+
+            return self.async_create_entry(
+                title=f"Powershop NZ",
+                data={
+                    CONF_EMAIL: self._email,
+                    CONF_REFRESH_TOKEN: self.user_info["refresh_token"],
+                    CONF_ACCOUNT_ID: self.user_info["account_id"],
+                    CONF_PROPERTY_ID: self.user_info["property_id"],
+                    CONF_PROPERTY_ADDRESS: self.user_info["property_address"],
+                },
+                options={
+                    **user_input,
+                }
+            )
+
+        return self.async_show_form(
+            step_id="sensors",
+            data_schema=vol.Schema({
+                vol.Required(
+                    group,
+                    default=enabled,
+                ): selector.BooleanSelector()
+                    for group, enabled in CONF_SENSOR_GROUPS.items()
+            }),
+            errors=errors,
+        )
+
     async def async_step_reauth(
         self, entry_data: Mapping[str, Any]
     ) -> FlowResult:
@@ -207,3 +241,32 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
             description_placeholders={"email": self._email},
         )
+
+class PowershopOptionsFlow(OptionsFlowWithReload):
+
+    async def async_step_init(self, user_input=None):
+        _LOGGER.debug(f"in init: {user_input}")
+        return await self.async_step_sensors(user_input)
+
+    async def async_step_sensors(self, user_input: dict[str, Any] | None = None ):
+
+        errors: Dict[str, str] = {}
+        _LOGGER.debug(f"in sensors: {user_input}")
+
+        _LOGGER.debug(f"options: {self.config_entry.options}")
+        if user_input is not None:
+            return self.async_create_entry(
+                data=user_input,
+            )
+
+        return self.async_show_form(
+            step_id="init",
+                data_schema=vol.Schema({
+                    vol.Required(
+                        group,
+                        default=enabled,
+                    ): selector.BooleanSelector()
+                        for group, enabled in self.config_entry.options.items()   
+                }),
+                errors=errors,
+            )

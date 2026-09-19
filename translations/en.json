@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Powershop NZ",
+        "description": "Enter the email address used for Powershop",
+        "data": {
+          "conf_email": "Email address"
+        }
+      },
+      "otp": {
+        "title": "Verification code",
+        "description": "Check your email for the verification code received from Powershop, paste it below",
+        "data": {
+          "otp": "Verification code"
+        }
+      },
+      "properties": {
+        "title": "Properties",
+        "description": "Select the property from the options below",
+        "data": {
+            "property_id": "Property"
+        }
+      },
+      "sensors": {
+        "title": "Sensors",
+        "description": "Select the sensors you want to enable (you can reconfigure them later)",
+        "data": {
+          "billing_dates": "Billing dates",
+          "billing_period": "Billing period usage and cost",
+          "rate_type": "Current rate type",
+          "nominal_rates": "Nominal unit and daily costs",
+          "effective_rates": "Effective unit costs using powerpacks discounts",
+          "historical_usage": "Past usage statistics",
+          "historical_cost": "Past cost statistics",
+          "powerpacks": "Powerpacks balances"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+        "init": {
+            "title": "Sensors",
+            "description": "Select the sensors you want to enable",
+            "data": {
+                "billing_dates": "Billing dates",
+                "billing_period": "Billing period usage and cost",
+                "rate_type": "Current rate type",
+                "nominal_rates": "Nominal unit and daily costs",
+                "effective_rates": "Effective unit costs using powerpacks discounts",
+                "historical_usage": "Past usage statistics",
+                "historical_cost": "Past cost statistics",
+                "powerpacks": "Powerpacks balances"
+            }
+        }
+    }
+  }
+}

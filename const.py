@@ -7,17 +7,36 @@ CONF_REFRESH_TOKEN = "refresh_token"
 CONF_ACCOUNT_ID = "account_id"
 CONF_PROPERTY_ID = "property_id"
 CONF_FLOW_TYPE = "flow_type"
-CONF_REGION = "region"
-CONF_PLAN = "plan"
-CONF_NETWORK_COMPANY = "network_company"
-CONF_USER_ID = "user_id"
 CONF_EMAIL="conf_email"
-CONF_ACCOUNT_ID = "account_id"
-CONF_PROPERTY_ID = "property_id"
 CONF_PROPERTY_ADDRESS = "property_address"
-CONF_PROPERTY_NAME = "property_name"
 CONF_UPDATE_INTERVAL = "update_interval"
-CONF_RATES_SCHEDULE = "rates_schedule"
+CONF_ENABLED_SENSORS = "enabled_sensors"
+CONF_SENSOR_GROUPS = {
+    "billing_dates": True,
+    "billing_period":  True,
+    "rate_type": True,
+    "nominal_rates": True,
+    "effective_rates": True,
+    "historical_usage": True,
+    "historical_cost": True,
+    "powerpacks": True,
+}
+
+SENSORS_GROUPS_MAP = {
+    "next_billing_date": "billing_dates",
+    "current_billing_period": "billing_dates",
+    "billing_period":  "billing_period" ,
+    "billing_days": "billing_period",
+    "unit_rate_type" : "rate_type",
+    "nominal_unit" : "nominal_rates",
+    "daily_charge" : "nominal_rates",  
+    "effective_unit": "effective_rates",
+    "effective_cost_ratio": "effective_rates",
+    "historical_usage": "historical_usage",
+    "historical_cost": "historical_cost",
+    "powerpacks": "powerpacks",
+}
+
 
 
 #Used for checking for changes in Powerpack balances and usage data availability

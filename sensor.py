@@ -52,6 +52,7 @@ from .const import (
     CONF_PROPERTY_ID,
     CONF_PROPERTY_ADDRESS,
     DOMAIN,
+    SENSORS_GROUPS_MAP
 )
 from .coordinator import PowershopCoordinator
 
@@ -59,7 +60,6 @@ type PowershopConfigEntry = ConfigEntry[RuntimeData]
 
 import logging
 _LOGGER = logging.getLogger(__name__)
-
 
 
 
@@ -164,6 +164,13 @@ SENSORS_GENERIC = [
         name='Current billing period end date',
         device_class=SensorDeviceClass.DATE,
     ),
+    SensorEntityDescription(
+        key='billing_period_usage_daily_charge',
+        name='Billing period days so far',
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=0,
+        icon="mdi:calendar-month",
+    ),
 ]
 
 SENSORS_PER_RATE = [
@@ -238,6 +245,17 @@ SENSORS_HISTORICAL_PER_RATE = [
     ),        
 ]
 
+
+def _sensor_to_group(sensor: str) -> str | None:
+    return next(
+        (
+            sensor_group
+            for sensor_key, sensor_group in SENSORS_GROUPS_MAP.items()
+            if sensor_key in sensor 
+        ),
+        None,
+    )
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: PowershopConfigEntry,
@@ -246,6 +264,7 @@ async def async_setup_entry(
     """Set up the Sensors."""
     coordinator: PowershopCoordinator = config_entry.runtime_data.coordinator
 
+    _LOGGER.debug("in sensor async_setup_entry")
     #get list of rates to turn into sensors
     rate_types = await coordinator.get_rate_types()
 
@@ -262,19 +281,19 @@ async def async_setup_entry(
             suggested_display_precision=sensor.suggested_display_precision,
         ),
         config_entry)
-        for sensor in SENSORS_PER_RATE 
+        for sensor in SENSORS_PER_RATE if config_entry.options.get(_sensor_to_group(sensor.key)) == True
         for rate_name, rate_type in rate_types.items()
     )
 
     #Regular sensors
     async_add_entities(
-        PowershopSensor(coordinator, description, config_entry)
-        for description in SENSORS_GENERIC
+        PowershopSensor(coordinator, sensor, config_entry)
+        for sensor in SENSORS_GENERIC if config_entry.options.get(_sensor_to_group(sensor.key)) == True
     )
     #Historical sensors - no current state
     async_add_entities(
-        PowershopHistoricalSensor(coordinator, description, config_entry)
-        for description in SENSORS_HISTORICAL
+        PowershopHistoricalSensor(coordinator, sensor, config_entry)
+        for sensor in SENSORS_HISTORICAL if config_entry.options.get(_sensor_to_group(sensor.key)) == True
     )
 
     #Historical sensor per rate
@@ -290,7 +309,7 @@ async def async_setup_entry(
             suggested_display_precision=sensor.suggested_display_precision,
         ),
         config_entry)
-        for sensor in SENSORS_HISTORICAL_PER_RATE 
+        for sensor in SENSORS_HISTORICAL_PER_RATE if config_entry.options.get(_sensor_to_group(sensor.key)) == True
         for rate_name, rate_type in rate_types.items()
     )
 
@@ -310,28 +329,26 @@ class PowershopSensor(CoordinatorEntity[PowershopCoordinator], SensorEntity):
         self.entity_description = description
         self.coordinator = coordinator
         
-        account_number = config_entry.data.get(CONF_ACCOUNT_ID, "unknown")
+        property_id = config_entry.data.get(CONF_PROPERTY_ID, "unknown")
         property_address = config_entry.data.get(CONF_PROPERTY_ADDRESS, "unknown")
         
-        self._attr_unique_id = f"{DOMAIN}_{account_number}_{description.key}"
+        self._attr_unique_id = f"{DOMAIN}_{property_id}_{description.key}"
         self._attr_name = f"{description.name}"
         self.entity_id = f"sensor.{DOMAIN}_{description.key}"
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, account_number)},
+            "identifiers": {(DOMAIN, property_id)},
             "name": f"{property_address}",
             "manufacturer": "Powershop NZ",
             "model": "Account",
         }
         self._key = description.key
 
-        _LOGGER.debug(f"powershop sensor init done: {description.name}")
-
     @property
     def native_value(self) -> Any:
         if not self.coordinator.data:
             return None
 
-        _LOGGER.debug(f"returning data: for {self._key}: " + str(self.coordinator.data.get(self._key)))
+        # _LOGGER.debug(f"returning data: for {self._key}: " + str(self.coordinator.data.get(self._key)))
         return self.coordinator.data.get(self._key)
 
 class PowershopHistoricalSensor(CoordinatorEntity[PowershopCoordinator], HistoricalSensor,SensorEntity):
@@ -346,14 +363,14 @@ class PowershopHistoricalSensor(CoordinatorEntity[PowershopCoordinator], Histori
         super().__init__(coordinator)
         _LOGGER.debug(f"powershop historical sensor init: {description.name}")
 
-        account_number = config_entry.data.get(CONF_ACCOUNT_ID, "unknown")
+        property_id = config_entry.data.get(CONF_PROPERTY_ID, "unknown")
         property_address = config_entry.data.get(CONF_PROPERTY_ADDRESS, "unknown")
 
-        self._attr_unique_id = f"{DOMAIN}_{account_number}_{description.key}"
+        self._attr_unique_id = f"{DOMAIN}_{property_id}_{description.key}"
         self._attr_name = f"{description.name}"
         self.entity_id = f"sensor.{DOMAIN}_{description.key}"
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, account_number)},
+            "identifiers": {(DOMAIN, property_id)},
             "name": f"{property_address}",
             "manufacturer": "Powershop NZ",
             "model": "Account",
@@ -386,14 +403,13 @@ class PowershopHistoricalSensor(CoordinatorEntity[PowershopCoordinator], Histori
         ]
 
         self._attr_historical_states = historical_states
-        _LOGGER.debug("historical data updated from upstream")
+        # _LOGGER.debug("historical data updated from upstream")
 
     def get_statistic_metadata(self) -> StatisticMetaData:
         meta = super().get_statistic_metadata()
         meta["has_sum"] = True
         meta["unit_of_measurement"] = self._native_unit_of_measurement 
         meta["unit_class"] = self._device_class
-        meta["icon"] = self._icon
         return meta
 
     async def async_calculate_statistic_data(
