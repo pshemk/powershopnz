@@ -36,7 +36,7 @@ PLATFORMS: list[Platform] = [
 type PowershopConfigEntry = ConfigEntry[RuntimeData]
 
 
-@datacla
+@dataclass
 class RuntimeData:
     """Class to hold your data."""
 
