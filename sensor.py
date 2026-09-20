@@ -369,6 +369,7 @@ class PowershopHistoricalSensor(CoordinatorEntity[PowershopCoordinator], Histori
         self._attr_unique_id = f"{DOMAIN}_{property_id}_{description.key}"
         self._attr_name = f"{description.name}"
         self.entity_id = f"sensor.{DOMAIN}_{description.key}"
+        self._attr_icon=description.icon
         self._attr_device_info = {
             "identifiers": {(DOMAIN, property_id)},
             "name": f"{property_address}",
@@ -379,7 +380,7 @@ class PowershopHistoricalSensor(CoordinatorEntity[PowershopCoordinator], Histori
         self._native_unit_of_measurement=description.native_unit_of_measurement
         self._device_class=description.device_class
         self._state_class=description.state_class
-        self._icon=description.icon
+
 
         self._attr_state = None
 
