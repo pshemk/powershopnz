@@ -65,15 +65,15 @@ class PowershopCoordinator(
         """Initialize the coordinator."""
 
         self.refresh_token = config_entry.data[CONF_REFRESH_TOKEN]
-        self.account_id = config_entry.data[CONF_ACCOUNT_ID]
-        self.property_id = config_entry.data[CONF_PROPERTY_ID]
-        self.property_address = config_entry.data[CONF_PROPERTY_ADDRESS]
+        self._account_id = config_entry.data[CONF_ACCOUNT_ID]
+        self._property_id = config_entry.data[CONF_PROPERTY_ID]
+        self._property_address = config_entry.data[CONF_PROPERTY_ADDRESS]
         self._config_entry = config_entry
-        self.poll_interval = config_entry.options.get(CONF_SCAN_INTERVAL, timedelta(seconds=DEFAULT_UPDATE_INTERVAL))
+        self._poll_interval = config_entry.options.get(CONF_SCAN_INTERVAL, timedelta(seconds=DEFAULT_UPDATE_INTERVAL))
         self._last_api_call = None
 
         self._stores = {
-            name: PowershopStore(hass, f"{self.property_id}_{name}")
+            name: PowershopStore(hass, f"{self._property_id}_{name}")
             for name in STORE_NAMES
         }
 
@@ -83,8 +83,8 @@ class PowershopCoordinator(
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN} {self.account_id}",
-            update_interval=timedelta(seconds=60)
+            name=f"{DOMAIN} {self._property_id}",
+            update_interval=self._poll_interval
         )
 
         self._usage_fetch_task: asyncio.Task | None = None
@@ -100,8 +100,8 @@ class PowershopCoordinator(
         self._cancel_usage_fetch_schedule = async_track_time_interval(
             self.hass,
             self._schedule_usage_fetch,
-            # timedelta(minutes=1),
-            timedelta(hours=1),            
+            timedelta(minutes=10),
+            # timedelta(hours=1),            
         )
         #run first fetch here, once HA is up
         async_at_started(
@@ -160,7 +160,7 @@ class PowershopCoordinator(
                 _LOGGER.debug(f"calling the API")
                 
                 #get powerpack balances, if they changed - get powerpacks as well
-                powerpacks_balances = await self.apiClient.get_powerpacks_balances(self.account_id)
+                powerpacks_balances = await self.apiClient.get_powerpacks_balances(self._account_id)
                 _LOGGER.debug(f"balances: current: {powerpacks_balances["powerpacks_available_balance"]} stored:{self._stores["powerpacks_balances"].data.get("powerpacks_available_balance")}")
                 if powerpacks_balances["powerpacks_available_balance"] != self._stores["powerpacks_balances"].data.get("powerpacks_available_balance"):
                     _LOGGER.debug("powerpacks balance has changed, refreshing powerpacks")
@@ -176,25 +176,25 @@ class PowershopCoordinator(
                 if not self._stores["powerpacks"].data  or refresh_powerpacks:
                     #get all powerpacks
                     _LOGGER.debug(f"updating powerpacks")
-                    powerpacks = await self.apiClient.get_powerpacks(self.account_id)
+                    powerpacks = await self.apiClient.get_powerpacks(self._account_id)
                     powerpacks.sort(key=lambda x: x['ratio'], reverse=False)
                     await self._stores["powerpacks"].async_save(powerpacks)
                 
                 if refresh_rates:
                     #get rates and rates schedules/timeslots
                     _LOGGER.debug(f"updating rates")
-                    rates = await self.apiClient.get_rates(self.account_id, self.property_id)
+                    rates = await self.apiClient.get_rates(self._account_id, self._property_id)
                     await self._stores["rates"].async_save({
                         **self._stores["rates"].data,
                         month: rates
                     })
                     
-                    rates_schedule = await self.apiClient.get_rates_schedule(self.account_id, self.property_id)
+                    rates_schedule = await self.apiClient.get_rates_schedule(self._account_id, self._property_id)
                     await self._stores["rates_schedule"].async_save(rates_schedule)
 
                     #get billing dates
                     _LOGGER.debug(f"updating billing dates")
-                    billing_dates = await self.apiClient.get_billing_dates(self.account_id)
+                    billing_dates = await self.apiClient.get_billing_dates(self._account_id)
                     await self._stores["billing_dates"].async_save(billing_dates)
 
                     await self._stores["config"].async_save({
@@ -241,7 +241,7 @@ class PowershopCoordinator(
         except Exception:
             _LOGGER.exception(
                 "Powershop coordinator UPDATE FAILED: %s",
-                self.account_id,
+                self._account_id,
             )
             raise
 
@@ -268,7 +268,7 @@ class PowershopCoordinator(
             if not self._stores["config"].data.get("last_usage_date"):
                 #no historic data has been retrived yet
                 _LOGGER.debug(f"fetching all usage data, this might take a while ...")
-                usage = await self.apiClient.get_usage(self.account_id, self.property_id)
+                usage = await self.apiClient.get_usage(self._account_id, self._property_id)
                 await self._stores["usage"].async_save(usage["usage"])
                 await self._stores["config"].async_save({
                     **self._stores["config"].data,
@@ -277,7 +277,7 @@ class PowershopCoordinator(
             else:
                 #only fetch new data
                 _LOGGER.debug(f"fetching recent usage data")
-                usage = await self.apiClient.get_usage(self.account_id, self.property_id, self._stores["config"].data.get("last_usage_date"))
+                usage = await self.apiClient.get_usage(self._account_id, self._property_id, self._stores["config"].data.get("last_usage_date"))
                 if usage["usage"]:
                     await self._stores["usage"].async_save({
                         **self._stores["usage"].data,
@@ -441,7 +441,7 @@ class PowershopCoordinator(
         
 
     async def get_rate_types(self) -> dict[str, Any]:
-        return await self.apiClient.get_rate_types(self.account_id, self.property_id)
+        return await self.apiClient.get_rate_types(self._account_id, self._property_id)
 
     async def get_historical_data(self, type: str) -> dict[str, Any]:
 
