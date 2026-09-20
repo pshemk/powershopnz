@@ -71,6 +71,7 @@ class PowershopCoordinator(
         self._config_entry = config_entry
         self._poll_interval = config_entry.options.get(CONF_SCAN_INTERVAL, timedelta(seconds=DEFAULT_UPDATE_INTERVAL))
         self._last_api_call = None
+        self._process_usage_data = False
 
         self._stores = {
             name: PowershopStore(hass, f"{self._property_id}_{name}")
@@ -88,8 +89,10 @@ class PowershopCoordinator(
         )
 
         self._usage_fetch_task: asyncio.Task | None = None
+        self._usage_process_task: asyncio.Task | None = None
 
         self._cancel_usage_fetch_schedule = None
+        self._cancel_usage_process_schedule = None
 
         self.apiClient = PowershopApiClient(self.refresh_token)
 
@@ -109,20 +112,42 @@ class PowershopCoordinator(
             self._schedule_usage_fetch,
         )        
 
+        #schedule periodic processing  of the usage data 
+        self._cancel_usage_process_schedule = async_track_time_interval(
+            self.hass,
+            self._schedule_usage_process,
+            timedelta(minutes=1),
+        )
+
+
     async def _schedule_usage_fetch(self, *args) -> None:
-        _LOGGER.debug("scheduling fetch task")
+        # _LOGGER.debug("scheduling fetch task")
         if  self._usage_fetch_task is not None and not self._usage_fetch_task.done():
-            _LOGGER.debug("Usage fetch already running")
+            _LOGGER.debug("Usage fetch is already running")
             return
 
         self._usage_fetch_task = self.hass.async_create_task(
             self._async_update_usage()
         )
 
+    async def _schedule_usage_process(self, *args) -> None:
+        # _LOGGER.debug("scheduling processing task")
+        if  self._usage_process_task is not None and not self._usage_process_task.done():
+            _LOGGER.debug("Usage process is  already running")
+            return
+
+        self._usage_process_task = self.hass.async_create_task(
+            self._async_process_usage()
+        )
+
     async def async_shutdown(self) -> None:
         if self._usage_fetch_task:
             self._usage_fetch_task.cancel()
             self._usage_fetch_task = None
+
+        if self._usage_process_task:
+            self._usage_process_task.cancel()
+            self._usage_process_task = None
 
         await self.apiClient.disconnect()        
 
@@ -179,6 +204,9 @@ class PowershopCoordinator(
                     powerpacks = await self.apiClient.get_powerpacks(self._account_id)
                     powerpacks.sort(key=lambda x: x['ratio'], reverse=False)
                     await self._stores["powerpacks"].async_save(powerpacks)
+
+                    #force reprocessing of the billing data
+                    self._process_usage_data = True
                 
                 if refresh_rates:
                     #get rates and rates schedules/timeslots
@@ -245,13 +273,13 @@ class PowershopCoordinator(
             )
             raise
 
-    def start_usage_update(self) -> None:
-        """Start background usage synchronisation."""
+    # def start_usage_update(self) -> None:
+    #     """Start background usage synchronisation."""
 
-        if self._usage_task is None or self._usage_task.done():
-            self._usage_task = self.hass.async_create_task(
-                self._async_update_usage()
-            )
+    #     if self._usage_task is None or self._usage_task.done():
+    #         self._usage_task = self.hass.async_create_task(
+    #             self._async_update_usage()
+    #         )
 
     
     async def _async_update_usage(self) -> None:
@@ -260,9 +288,8 @@ class PowershopCoordinator(
         try:
             _LOGGER.debug("Starting usage synchronisation")
 
-
             #just for now, reload the stores in case they got modified manually
-            # await self.async_load_stores()            
+            await self.async_load_stores()            
 
             #check available historic data
             if not self._stores["config"].data.get("last_usage_date"):
@@ -276,42 +303,63 @@ class PowershopCoordinator(
                 })
             else:
                 #only fetch new data
-                _LOGGER.debug(f"fetching recent usage data")
+                _LOGGER.debug(f"fetching recent usage data past {self._stores["config"].data.get("last_usage_date")}")
                 usage = await self.apiClient.get_usage(self._account_id, self._property_id, self._stores["config"].data.get("last_usage_date"))
                 if usage["usage"]:
                     await self._stores["usage"].async_save({
                         **self._stores["usage"].data,
                         **usage["usage"],
                         })
+
+                    #check if we actually got any new data
+                    if usage["last_usage_date"] != self._stores["config"].data.get("last_usage_date"):
+                        self._process_usage_data = True
+
                     await self._stores["config"].async_save({
                         **self._stores["config"].data,
                         "last_usage_date": usage["last_usage_date"]
                     })
             _LOGGER.debug("Usage synchronised")
-        
+
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _LOGGER.exception("Unable to synchronise usage data")
+
+
+    async def _async_process_usage(self) -> None:
+        """Process usage data in the background."""
+
+        try:
+            # _LOGGER.debug("Starting usage processing")
+
             #check if anything needs to processed:
-            if self._stores["config"].data.get("last_usage_date") != self._stores["config"].data.get("last_processed_date"):
-            # if True:
+            if self._process_usage_data:
                 _LOGGER.debug("New data to process")
-                _LOGGER.debug(f"Latests usage: {self._stores["config"].data.get("last_usage_date")}, proccessed up to: {self._stores["config"].data.get("last_processed_date")}")
+                _LOGGER.debug(f"Latests usage: {self._stores["config"].data.get("last_usage_date")}, processed up to: {self._stores["config"].data.get("last_processed_date")}")
 
                 #Determine the start and end of the current billing period                
-                biliing_period_start_str = self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_start_date", "1970-01-01T00:00:00+00:00") 
-                biliing_period_end_str = self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_end_date", "1970-01-01T00:00:00+00:00") 
+                billing_period_start = self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_start_date", "1970-01-01T00:00:00+00:00") 
+                billing_period_end = self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_end_date", "1970-01-01T00:00:00+00:00") 
 
-                billing_period_start = 0
-                billing_period_end = 0
 
-                try: 
-                    billing_period_start = datetime.fromisoformat(biliing_period_start_str)
-                    billing_period_end = datetime.fromisoformat(biliing_period_end_str)
-                except TypeError as e:
-                    _LOGGER.warning(f"couldn't get billing period dates: {e}")
+                #the store class doesn't handle timestamps - they get restored as strings, but if they get fetched from the API - they're ints
+                #convert here
+                if isinstance(billing_period_start, (str)):
+                    billing_period_start = datetime.fromisoformat(billing_period_start)
+                elif isinstance(billing_period_start, (int, float)):
+                    billing_period_start = datetime.fromtimestamp(billing_period_start, dt_util.get_time_zone("Pacific/Auckland"))
+                else:
+                    _LOGGER.debug(f"billing start date: type: {type(billing_period_start)}")
+                    billing_period_start = datetime.fromtimestamp(0, dt_util.get_time_zone("Pacific/Auckland"))
                 
-
-                _LOGGER.debug(f"billing start date: type: {type(billing_period_start)}")
-                _LOGGER.debug(f"billing end date: type: {type(billing_period_end)}")
-
+                if isinstance(billing_period_end, (str)):
+                    billing_period_end = datetime.fromisoformat(billing_period_end)
+                elif isinstance(billing_period_end, (int, float)):
+                    billing_period_end = datetime.fromtimestamp(billing_period_end, dt_util.get_time_zone("Pacific/Auckland"))
+                else:
+                    _LOGGER.debug(f"billing end date: type: {type(billing_period_end)}")
+                    billing_period_start = datetime.fromtimestamp(0, dt_util.get_time_zone("Pacific/Auckland"))
 
                 #make sure we have the start and end dates
                 if billing_period_start < billing_period_end:
@@ -427,19 +475,19 @@ class PowershopCoordinator(
                         **self._stores["config"].data,
                         "last_processed_date": self._stores["config"].data.get("last_usage_date")
                     })
+                    self._process_usage_data = False
 
                     _LOGGER.debug("Done processing new data")
                 else:
-                    _LOGGER.debug("Billing dates are not set")
-            else:
-                _LOGGER.debug("no new data to process")
+                    _LOGGER.debug("Inconsistent billing dates, can't process data")
+            # else:
+            #     _LOGGER.debug("No new data to process")
 
         except asyncio.CancelledError:
             raise
         except Exception:
-            _LOGGER.exception("Unable to synchronise usage data")
+            _LOGGER.exception("Unable to process usage data")
         
-
     async def get_rate_types(self) -> dict[str, Any]:
         return await self.apiClient.get_rate_types(self._account_id, self._property_id)
 
