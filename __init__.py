@@ -17,7 +17,7 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import (
     DOMAIN,
-    CONF_ACCOUNT_ID,
+    CONF_PROPERTY_ID,
     SENSORS_GROUPS_MAP,
 )
 from .coordinator import PowershopCoordinator
@@ -58,7 +58,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: PowershopConfigEn
     ):
         group = _sensor_group_from_unique_id(
             entity.unique_id,
-            config_entry.data[CONF_ACCOUNT_ID],
+            config_entry.data[CONF_PROPERTY_ID],
         )
 
         if group and enabled_groups.get(group) is False:
