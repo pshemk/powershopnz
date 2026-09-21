@@ -66,6 +66,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: PowershopConfigEn
             registry.async_remove(entity.entity_id)    
   
     coordinator = PowershopCoordinator(hass, config_entry)
+    config_entry.async_on_unload(coordinator.async_shutdown)
 
     await coordinator.async_load_stores()
     

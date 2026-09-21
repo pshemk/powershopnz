@@ -1,14 +1,14 @@
 """Config flow for Powershop integration."""
+
 import logging
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Mapping, TypedDict
 
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.helpers import selector
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.config_entries import OptionsFlowWithReload
-
+from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import selector
 
 from .api import AuthError, OTPError, PowershopApiClient
 from .const import (
@@ -18,23 +18,32 @@ from .const import (
     CONF_PROPERTY_ADDRESS,
     CONF_REFRESH_TOKEN,
     CONF_SENSOR_GROUPS,
-    CONF_ENABLED_SENSORS,
-    CONF_SENSOR_GROUPS,
     DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
+class PropertyInfo(TypedDict):
+    """Property returned by the Powershop API."""
+
+    property_id: str
+    account_id: str
+    address: str
+
+
 class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    
+    """Handle a Powershop configuration flow."""
+
     VERSION = 1
 
     def __init__(self) -> None:
-        self._email: Optional[str] = None
-        self._journey_id: Optional[str] = None
+        self._email: str | None = None
+        self._journey_id: str | None = None
         self._client = PowershopApiClient()
-        self.user_info = {}
+        self._refresh_token: str | None = None
+        self._properties: list[PropertyInfo] = []
+        self._selected_property: PropertyInfo | None = None
 
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
@@ -43,15 +52,14 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return PowershopOptionsFlow()
 
     async def async_step_user(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             email = user_input[CONF_EMAIL].strip().lower()
             try:
                 journey_id = await self._client.send_otp(email)
-                await self._client.disconnect()
                 self._email = email
                 self._journey_id = journey_id
                 return await self.async_step_otp()
@@ -65,30 +73,25 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({
-                vol.Required(CONF_EMAIL): str
-            }),
+            data_schema=vol.Schema({vol.Required(CONF_EMAIL): str}),
             errors=errors or {},
         )
 
     async def async_step_otp(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             otp = user_input["otp"].strip()
 
             try:
+                if self._email is None or self._journey_id is None:
+                    raise AuthError("OTP flow state is missing")
                 tokens = await self._client.verify_otp(self._email, otp, self._journey_id)
+                self._refresh_token = tokens["refresh_token"]
 
-                self._client._refresh_token = tokens["refresh_token"]
-                self._client._id_token = tokens["id_token"]
-
-                self.user_info["refresh_token"] = tokens["refresh_token"]
-
-                # Get properties            
-                self.user_info["properties"] = await self._client.get_properties()
+                self._properties = await self._client.get_properties()
                 return await self.async_step_properties()
             except OTPError:
                 errors["base"] = "invalid_otp"
@@ -102,73 +105,89 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="otp",
-            data_schema=vol.Schema({
-              vol.Required("otp"): str
-            }),
+            data_schema=vol.Schema(
+                {vol.Required("otp"): vol.All(str, vol.Length(min=6, max=6))}
+            ),
             errors=errors,
             description_placeholders={"email": self._email},
         )
 
-    async def async_step_properties(self, user_input: Optional[Dict[str, Any]] = None
+    async def async_step_properties(
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
         if user_input is not None:
-
-            #find the account_id from the property_id
-            self.user_info["property_id"] = user_input["property_id"]
-            self.user_info["account_id"] = [ property["account_id"] for property in self.user_info["properties"] if property["property_id"] == user_input["property_id"] ][0]
-            self.user_info["property_address"] = [ property["address"] for property in self.user_info["properties"] if property["property_id"] == user_input["property_id"] ][0]
-            _LOGGER.debug(f"user_info: {self.user_info}")
-
+            properties = {
+                property_data["property_id"]: property_data
+                for property_data in self._properties
+            }
+            self._selected_property = properties[user_input[CONF_PROPERTY_ID]]
             return await self.async_step_sensors()
 
 
         return self.async_show_form(
             step_id="properties",
-            data_schema=vol.Schema({
-                vol.Required(CONF_PROPERTY_ID): vol.In(
-                    {
-                        property["property_id"]: property["address"] for property in self.user_info["properties"]
-                    }
-                ),
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PROPERTY_ID): vol.In(
+                        {
+                            property_data["property_id"]: property_data["address"]
+                            for property_data in self._properties
+                        }
+                    )
+                }
+            ),
             errors=errors,
         )
 
-    async def async_step_sensors(self, user_input: Optional[Dict[str, Any]] = None
+    async def async_step_sensors(
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
         if user_input is not None:
+            if (
+                self._email is None
+                or self._selected_property is None
+                or self._refresh_token is None
+            ):
+                errors["base"] = "cannot_connect"
+                return self.async_show_form(
+                    step_id="sensors",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required(group, default=enabled): selector.BooleanSelector()
+                            for group, enabled in CONF_SENSOR_GROUPS.items()
+                        }
+                    ),
+                    errors=errors,
+                )
 
-            #find the account_id from the property_id
-            _LOGGER.debug(f"user_info: {self.user_info}")
-            _LOGGER.debug(f"user_input: {user_input}")
-
-            _LOGGER.debug("creating entry")
+            property_data = self._selected_property
+            await self.async_set_unique_id(
+                f"{property_data['account_id']}_{property_data['property_id']}"
+            )
+            self._abort_if_unique_id_configured()
 
             return self.async_create_entry(
-                title=f"Powershop NZ",
+                title="Powershop NZ",
                 data={
                     CONF_EMAIL: self._email,
-                    CONF_REFRESH_TOKEN: self.user_info["refresh_token"],
-                    CONF_ACCOUNT_ID: self.user_info["account_id"],
-                    CONF_PROPERTY_ID: self.user_info["property_id"],
-                    CONF_PROPERTY_ADDRESS: self.user_info["property_address"],
+                    CONF_REFRESH_TOKEN: self._refresh_token,
+                    CONF_ACCOUNT_ID: property_data["account_id"],
+                    CONF_PROPERTY_ID: property_data["property_id"],
+                    CONF_PROPERTY_ADDRESS: property_data["address"],
                 },
-                options={
-                    **user_input,
-                }
+                options=user_input,
             )
 
         return self.async_show_form(
             step_id="sensors",
-            data_schema=vol.Schema({
-                vol.Required(
-                    group,
-                    default=enabled,
-                ): selector.BooleanSelector()
+            data_schema=vol.Schema(
+                {
+                    vol.Required(group, default=enabled): selector.BooleanSelector()
                     for group, enabled in CONF_SENSOR_GROUPS.items()
-            }),
+                }
+            ),
             errors=errors,
         )
 
@@ -180,16 +199,19 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             try:
+                if self._email is None:
+                    raise AuthError("Re-authentication email is missing")
                 journey_id = await self._client.send_otp(self._email)
-                await self._client.disconnect()
                 self._journey_id = journey_id
                 return await self.async_step_reauth_otp()
+            except AuthError:
+                errors["base"] = "email_not_found"
             except Exception:
                 _LOGGER.exception("Re-auth OTP send failed")
                 errors["base"] = "cannot_connect"
@@ -204,15 +226,16 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_reauth_otp(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             otp = user_input["otp"].strip()
             try:
+                if self._email is None or self._journey_id is None:
+                    raise AuthError("OTP flow state is missing")
                 tokens = await self._client.verify_otp(self._email, otp, self._journey_id)
-                _LOGGER.debug(f"tokens: {tokens}")
                 entry = self.hass.config_entries.async_get_entry(
                     self.context["entry_id"]
                 )
@@ -235,38 +258,36 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reauth_otp",
-            data_schema=vol.Schema({
-              vol.Required("otp"): str
-            }),
+            data_schema=vol.Schema(
+                {vol.Required("otp"): vol.All(str, vol.Length(min=6, max=6))}
+            ),
             errors=errors,
             description_placeholders={"email": self._email},
         )
 
-class PowershopOptionsFlow(OptionsFlowWithReload):
 
-    async def async_step_init(self, user_input=None):
-        _LOGGER.debug(f"in init: {user_input}")
+class PowershopOptionsFlow(OptionsFlowWithReload):
+    """Handle Powershop options."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         return await self.async_step_sensors(user_input)
 
-    async def async_step_sensors(self, user_input: dict[str, Any] | None = None ):
-
-        errors: Dict[str, str] = {}
-        _LOGGER.debug(f"in sensors: {user_input}")
-
-        _LOGGER.debug(f"options: {self.config_entry.options}")
+    async def async_step_sensors(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(
-                data=user_input,
-            )
+            return self.async_create_entry(data=user_input)
 
         return self.async_show_form(
             step_id="init",
-                data_schema=vol.Schema({
-                    vol.Required(
-                        group,
-                        default=enabled,
-                    ): selector.BooleanSelector()
-                        for group, enabled in self.config_entry.options.items()   
-                }),
-                errors=errors,
-            )
+            data_schema=vol.Schema(
+                {
+                    vol.Required(group, default=enabled): selector.BooleanSelector()
+                    for group, enabled in self.config_entry.options.items()
+                }
+            ),
+            errors=errors,
+        )
