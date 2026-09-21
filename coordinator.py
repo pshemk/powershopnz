@@ -99,6 +99,8 @@ class PowershopCoordinator(
         )
 
     async def _async_setup(self) -> None:
+        """Schedule background usage fetching and processing."""
+
         _LOGGER.debug("_async_setup")
 
         #schedule periodic fetching of the usage data
@@ -129,6 +131,8 @@ class PowershopCoordinator(
 
 
     async def _schedule_usage_fetch(self, *args) -> None:
+        """Start a usage-fetch task when none is already running."""
+
         if  self._usage_fetch_task is not None and not self._usage_fetch_task.done():
             _LOGGER.debug("Usage fetch is already running")
             return
@@ -138,6 +142,8 @@ class PowershopCoordinator(
         )
 
     async def _schedule_usage_process(self, *args) -> None:
+        """Start a usage-processing task when none is already running."""
+
         if  self._usage_process_task is not None and not self._usage_process_task.done():
             _LOGGER.debug("Usage process is  already running")
             return
@@ -147,6 +153,8 @@ class PowershopCoordinator(
         )
 
     async def async_shutdown(self) -> None:
+        """Cancel background work, remove schedules, and close the API client."""
+
         if self._cancel_usage_fetch_schedule:
             self._cancel_usage_fetch_schedule()
             self._cancel_usage_fetch_schedule = None
@@ -176,6 +184,8 @@ class PowershopCoordinator(
         )
 
     def _str_to_timestamp(self, data: dict[str, str]) -> dict[str, datetime]:
+        """Convert stored ISO timestamp strings into datetime objects."""
+
         return {
             k: datetime.fromisoformat(v)
             for k, v in data.items() if isinstance(v, str)
@@ -203,13 +213,13 @@ class PowershopCoordinator(
                 powerpacks_balances = await self._api_client.get_powerpacks_balances(
                     self._account_id
                 )
-                _LOGGER.debug(
-                    "Powerpack balance: current=%s stored=%s",
-                    powerpacks_balances["powerpacks_available_balance"],
-                    self._stores["powerpacks_balances"].data.get(
-                        "powerpacks_available_balance"
-                    ),
-                )
+                # _LOGGER.debug(
+                #     "Powerpack balance: current=%s stored=%s",
+                #     powerpacks_balances["powerpacks_available_balance"],
+                #     self._stores["powerpacks_balances"].data.get(
+                #         "powerpacks_available_balance"
+                #     ),
+                # )
                 if powerpacks_balances["powerpacks_available_balance"] != self._stores["powerpacks_balances"].data.get("powerpacks_available_balance"):
                     _LOGGER.debug("powerpacks balance has changed, refreshing powerpacks")
                     refresh_powerpacks = True
@@ -352,7 +362,7 @@ class PowershopCoordinator(
 
             #check if anything needs to processed:
             if self._process_usage_data:
-                _LOGGER.debug("New data to process")
+                _LOGGER.debug("Data to process")
                 _LOGGER.debug(
                     "Latest usage: %s, processed up to: %s",
                     self._stores["config"].data.get("last_usage_date"),
@@ -519,6 +529,8 @@ class PowershopCoordinator(
                     )
                     _LOGGER.debug("Final ratio: %.2f", final_ratio)
 
+
+                    # Store all values, so the sensors get pull them out when needed
                     await self._stores["sensors"].async_save({
                         **self._stores["sensors"].data,
                         'historical': {
@@ -548,7 +560,7 @@ class PowershopCoordinator(
                     })
                     self._process_usage_data = False
 
-                    _LOGGER.debug("Done processing new data")
+                    _LOGGER.debug("Done processing data")
                 else:
                     _LOGGER.debug("Inconsistent billing dates, can't process data")
             # else:
@@ -560,11 +572,14 @@ class PowershopCoordinator(
             raise
         
     async def get_rate_types(self) -> dict[str, Any]:
+        """Return the configured rate types for this property."""
+
         return await self._api_client.get_rate_types(
             self._account_id, self._property_id
         )
 
     async def get_historical_data(self, type: str) -> dict[str, Any]:
+        """Return historical sensor data keyed by Unix timestamp."""
 
         historical_data = self._stores["sensors"].data.get("historical",{}).get(type,{})
         historical_data_filtered = {}
