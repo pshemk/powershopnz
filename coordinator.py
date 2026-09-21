@@ -118,7 +118,7 @@ class PowershopCoordinator(
         self._cancel_usage_process_schedule = async_track_time_interval(
             self.hass,
             self._schedule_usage_process,
-            timedelta(minutes=1),
+            timedelta(seconds=30),
         )
 
         #run first process here, once HA is up
@@ -184,7 +184,7 @@ class PowershopCoordinator(
     async def _async_update_data(
         self,
     ) -> dict[str, Any]:
-        """Getting data to supply to sensors."""
+        """Getting data to feed the sensors."""
 
         try:
             refresh_powerpacks = False
@@ -348,7 +348,7 @@ class PowershopCoordinator(
         """Process usage data in the background."""
 
         try:
-            _LOGGER.debug("Starting usage processing")
+            # _LOGGER.debug("Starting usage processing")
 
             #check if anything needs to processed:
             if self._process_usage_data:
@@ -360,15 +360,15 @@ class PowershopCoordinator(
                 )
 
                 #Determine the start and end of the current billing period                
-                billing_period_start = self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_start_date", "1970-01-01T00:00:00+00:00") 
+                billing_period_start = self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_start_date", "2100-01-01T00:00:00+00:00") 
                 billing_period_end = self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_end_date", "1970-01-01T00:00:00+00:00") 
 
 
-                #the store class doesn't handle timestamps - they get restored as strings, but if they get fetched from the API - they're ints
+                #the store class doesn't handle timestamps - depending where they come from they might be timestamps, ints/floats or strings
                 #convert here
                 if isinstance(billing_period_start, datetime):
                     pass
-                if isinstance(billing_period_start, (str)):
+                elif isinstance(billing_period_start, (str)):
                     billing_period_start = datetime.fromisoformat(billing_period_start)
                 elif isinstance(billing_period_start, (int, float)):
                     billing_period_start = datetime.fromtimestamp(billing_period_start, dt_util.get_time_zone("Pacific/Auckland"))
@@ -388,7 +388,8 @@ class PowershopCoordinator(
                         0, dt_util.get_time_zone("Pacific/Auckland")
                     )
 
-                #make sure we have the start and end dates
+                _LOGGER.debug(f"billing period start: {billing_period_start.isoformat()} billing period end: {billing_period_end.isoformat()}")                
+                #make sure we have the start and end dates in the right order
                 if billing_period_start < billing_period_end:
                     billing_period_month = billing_period_start.strftime("%m")
                     billing_period_usage = 0
@@ -550,8 +551,8 @@ class PowershopCoordinator(
                     _LOGGER.debug("Done processing new data")
                 else:
                     _LOGGER.debug("Inconsistent billing dates, can't process data")
-            else:
-                _LOGGER.debug("No new data to process (flag not set)")
+            # else:
+            #     _LOGGER.debug("No new data to process (flag not set)")
         except asyncio.CancelledError:
             raise
         except Exception:
