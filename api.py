@@ -598,7 +598,7 @@ class PowershopApiClient:
                 raise ValueError("Powerpacks pagination returned an invalid cursor")
             cursor = next_cursor
         
-        _LOGGER.debug(f"raw powerpacks data:{powerpacks_data}")
+        # _LOGGER.debug(f"raw powerpacks data:{powerpacks_data}")
         return powerpacks_data
             
 
@@ -611,7 +611,7 @@ class PowershopApiClient:
 
         for rate_name, rate_type in rate_types.items():
             buckets[rate_type["bucket"]] = rate_name
-        _LOGGER.debug(f"buckets: {buckets}")    
+        # _LOGGER.debug(f"buckets: {buckets}")    
         
         rates_data =  await self._run_query(
             QUERY_RATES, {"accountNumber": account_id, "propertyId": property_id}
@@ -625,7 +625,7 @@ class PowershopApiClient:
             _LOGGER.debug("no tous")
             return []
         timeslots = tous[0].get("timeslots", [])
-        _LOGGER.debug(f"timeslots: {timeslots}")
+        # _LOGGER.debug(f"timeslots: {timeslots}")
         if not timeslots or len(timeslots) == 0:
             return []
         

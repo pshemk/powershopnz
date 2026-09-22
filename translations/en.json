@@ -41,17 +41,18 @@
   "options": {
     "step": {
         "init": {
-            "title": "Sensors",
-            "description": "Select the sensors you want to enable",
+            "title": "Options",
+            "description": "Select the sensors you want to enable and processing options",
             "data": {
-                "billing_dates": "Billing dates",
-                "billing_period": "Billing period usage and cost",
-                "rate_type": "Current rate type",
-                "nominal_rates": "Nominal unit and daily costs",
-                "effective_rates": "Effective unit costs using powerpacks discounts",
+                "billing_dates": "Billing dates sensors",
+                "billing_period": "Billing period usage and cost sensors",
+                "rate_type": "Current rate type sensor",
+                "nominal_rates": "Nominal unit and daily costs sensors",
+                "effective_rates": "Effective unit costs using powerpacks discounts sensors",
                 "historical_usage": "Past usage statistics",
                 "historical_cost": "Past cost statistics",
-                "powerpacks": "Powerpacks balances"
+                "powerpacks": "Powerpacks balances sensors",
+                "reprocess_data": "Reprocess current billing period"
             }
         }
     }

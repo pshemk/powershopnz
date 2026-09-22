@@ -51,6 +51,7 @@ from .const import (
     CONF_ACCOUNT_ID,
     CONF_PROPERTY_ID,
     CONF_PROPERTY_ADDRESS,
+    CONF_SENSORS_OPTIONS,
     DOMAIN,
     SENSORS_GROUPS_MAP
 )
@@ -281,19 +282,19 @@ async def async_setup_entry(
             suggested_display_precision=sensor.suggested_display_precision,
         ),
         config_entry)
-        for sensor in SENSORS_PER_RATE if config_entry.options.get(_sensor_to_group(sensor.key)) == True
+        for sensor in SENSORS_PER_RATE if config_entry.options.get(CONF_SENSORS_OPTIONS, {}).get(_sensor_to_group(sensor.key)) == True
         for rate_name, rate_type in rate_types.items()
     )
 
     #Regular sensors
     async_add_entities(
         PowershopSensor(coordinator, sensor, config_entry)
-        for sensor in SENSORS_GENERIC if config_entry.options.get(_sensor_to_group(sensor.key)) == True
+        for sensor in SENSORS_GENERIC if config_entry.options.get(CONF_SENSORS_OPTIONS, {}).get(_sensor_to_group(sensor.key)) == True
     )
     #Historical sensors - no current state
     async_add_entities(
         PowershopHistoricalSensor(coordinator, sensor, config_entry)
-        for sensor in SENSORS_HISTORICAL if config_entry.options.get(_sensor_to_group(sensor.key)) == True
+        for sensor in SENSORS_HISTORICAL if config_entry.options.get(CONF_SENSORS_OPTIONS, {}).get(_sensor_to_group(sensor.key)) == True
     )
 
     #Historical sensor per rate
@@ -309,7 +310,7 @@ async def async_setup_entry(
             suggested_display_precision=sensor.suggested_display_precision,
         ),
         config_entry)
-        for sensor in SENSORS_HISTORICAL_PER_RATE if config_entry.options.get(_sensor_to_group(sensor.key)) == True
+        for sensor in SENSORS_HISTORICAL_PER_RATE if config_entry.options.get(CONF_SENSORS_OPTIONS, {}).get(_sensor_to_group(sensor.key)) == True
         for rate_name, rate_type in rate_types.items()
     )
 

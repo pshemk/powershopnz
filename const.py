@@ -11,7 +11,9 @@ CONF_EMAIL="conf_email"
 CONF_PROPERTY_ADDRESS = "property_address"
 CONF_UPDATE_INTERVAL = "update_interval"
 CONF_ENABLED_SENSORS = "enabled_sensors"
-CONF_SENSOR_GROUPS = {
+CONF_REPROCESS_DATA = "reprocess_data"
+CONF_SENSORS_OPTIONS = "sensors_options"
+CONF_SENSORS_GROUPS = {
     "billing_dates": True,
     "billing_period":  True,
     "rate_type": True,

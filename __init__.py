@@ -18,6 +18,7 @@ from homeassistant.helpers import entity_registry as er
 from .const import (
     DOMAIN,
     CONF_PROPERTY_ID,
+    CONF_SENSORS_OPTIONS,
     SENSORS_GROUPS_MAP,
 )
 from .coordinator import PowershopCoordinator
@@ -49,7 +50,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: PowershopConfigEn
 
     _LOGGER.debug("async setup entry")
 
-    enabled_groups = config_entry.options
+    enabled_groups = config_entry.options.get(CONF_SENSORS_OPTIONS, {})
     registry = er.async_get(hass)
 
     for entity in er.async_entries_for_config_entry(

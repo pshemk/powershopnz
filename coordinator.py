@@ -31,6 +31,7 @@ from .const import (
     CONF_PROPERTY_ID,
     CONF_PROPERTY_ADDRESS,
     CONF_REFRESH_TOKEN,
+    CONF_REPROCESS_DATA,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_API_CALL_INTERVAL,
 )
@@ -44,7 +45,7 @@ STORE_NAMES = (
     "rates",
     "powerpacks",
     "powerpacks_balances",
-    "config",
+    "state",
     "usage",
     "billing_dates",
     "sensors",
@@ -101,8 +102,6 @@ class PowershopCoordinator(
     async def _async_setup(self) -> None:
         """Schedule background usage fetching and processing."""
 
-        _LOGGER.debug("_async_setup")
-
         #schedule periodic fetching of the usage data
         self._cancel_usage_fetch_schedule = async_track_time_interval(
             self.hass,
@@ -128,6 +127,21 @@ class PowershopCoordinator(
             self.hass,
             self._schedule_usage_process,
         )        
+
+        if self._config_entry.options.get(CONF_REPROCESS_DATA):
+            _LOGGER.debug("Will force-reprocess current billing period")
+            await self._stores["state"].async_save({
+                **self._stores["state"].data,
+                "last_usage_date": None
+            })
+            self.hass.config_entries.async_update_entry(
+                self._config_entry,
+                options={
+                    **self._config_entry.options,
+                    CONF_REPROCESS_DATA: False,
+                },
+            )            
+            _LOGGER.debug(f"post processed: {self._config_entry.options}")
 
 
     async def _schedule_usage_fetch(self, *args) -> None:
@@ -228,7 +242,7 @@ class PowershopCoordinator(
                 await self._stores["powerpacks_balances"].async_save(powerpacks_balances)
 
                 #if this is a new day - fetch the rates (and schedules just to be safe) as well
-                if self._stores["config"].data.get("last_rates_refresh") != today:
+                if self._stores["state"].data.get("last_rates_refresh") != today:
                     refresh_rates = True
 
                 if not self._stores["powerpacks"].data  or refresh_powerpacks:
@@ -260,8 +274,8 @@ class PowershopCoordinator(
                     billing_dates = await self._api_client.get_billing_dates(self._account_id)
                     await self._stores["billing_dates"].async_save(billing_dates)
 
-                    await self._stores["config"].async_save({
-                        **self._stores["config"].data,
+                    await self._stores["state"].async_save({
+                        **self._stores["state"].data,
                         "last_rates_refresh": today
                     })
 
@@ -315,18 +329,19 @@ class PowershopCoordinator(
             await self.async_load_stores()            
 
             #check available historic data
-            if not self._stores["config"].data.get("last_usage_date"):
+            if not self._stores["state"].data.get("last_usage_date"):
                 #no historic data has been retrived yet
                 _LOGGER.debug("Fetching all usage data; this might take a while")
                 usage = await self._api_client.get_usage(self._account_id, self._property_id)
                 await self._stores["usage"].async_save(usage["usage"])
-                await self._stores["config"].async_save({
-                    **self._stores["config"].data,
+                await self._stores["state"].async_save({
+                    **self._stores["state"].data,
                     "last_usage_date": usage["last_usage_date"]
                 })
+                self._process_usage_data = True
             else:
                 #only fetch new data
-                last_usage_date = self._stores["config"].data.get("last_usage_date")
+                last_usage_date = self._stores["state"].data.get("last_usage_date")
                 _LOGGER.debug("Fetching usage data after %s", last_usage_date)
                 usage = await self._api_client.get_usage(
                     self._account_id, self._property_id, last_usage_date
@@ -338,11 +353,11 @@ class PowershopCoordinator(
                         })
 
                     #check if we actually got any new data
-                    if usage["last_usage_date"] != self._stores["config"].data.get("last_usage_date"):
+                    if usage["last_usage_date"] != self._stores["state"].data.get("last_usage_date"):
                         self._process_usage_data = True
 
-                    await self._stores["config"].async_save({
-                        **self._stores["config"].data,
+                    await self._stores["state"].async_save({
+                        **self._stores["state"].data,
                         "last_usage_date": usage["last_usage_date"]
                     })
             _LOGGER.debug("Usage synchronised")
@@ -365,8 +380,8 @@ class PowershopCoordinator(
                 _LOGGER.debug("Data to process")
                 _LOGGER.debug(
                     "Latest usage: %s, processed up to: %s",
-                    self._stores["config"].data.get("last_usage_date"),
-                    self._stores["config"].data.get("last_processed_date"),
+                    self._stores["state"].data.get("last_usage_date"),
+                    self._stores["state"].data.get("last_processed_date"),
                 )
 
                 #Determine the start and end of the current billing period                
@@ -554,9 +569,9 @@ class PowershopCoordinator(
                             'effective_cost_ratio': final_ratio,
                         }
                     })
-                    await self._stores["config"].async_save({
-                        **self._stores["config"].data,
-                        "last_processed_date": self._stores["config"].data.get("last_usage_date")
+                    await self._stores["state"].async_save({
+                        **self._stores["state"].data,
+                        "last_processed_date": self._stores["state"].data.get("last_usage_date")
                     })
                     self._process_usage_data = False
 
@@ -587,7 +602,7 @@ class PowershopCoordinator(
         #check if we have data for this historical sensor
         if historical_data:
 
-            start_timestamp = datetime.fromisoformat(self._stores["config"].data.get(f"last_timestamp_{type}", datetime.combine(date(1970,1,1), time.min, tzinfo=dt_util.get_time_zone("Pacific/Auckland")).isoformat()))
+            start_timestamp = datetime.fromisoformat(self._stores["state"].data.get(f"last_timestamp_{type}", datetime.combine(date(1970,1,1), time.min, tzinfo=dt_util.get_time_zone("Pacific/Auckland")).isoformat()))
 
             for timestamp, value in historical_data.items():
 
@@ -596,8 +611,8 @@ class PowershopCoordinator(
                 historical_data_filtered[float(ts.timestamp())] = value
                     # last_timestamp = ts
             
-            # await self._stores["config"].async_save({
-            #     **self._stores["config"].data,
+            # await self._stores["state"].async_save({
+            #     **self._stores["state"].data,
             #     f"last_timestamp_{type}": last_timestamp.isoformat()
             # })
 

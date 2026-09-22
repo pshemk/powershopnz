@@ -17,7 +17,9 @@ from .const import (
     CONF_PROPERTY_ID,
     CONF_PROPERTY_ADDRESS,
     CONF_REFRESH_TOKEN,
-    CONF_SENSOR_GROUPS,
+    CONF_SENSORS_GROUPS,
+    CONF_REPROCESS_DATA,
+    CONF_SENSORS_OPTIONS,
     DOMAIN,
 )
 
@@ -156,7 +158,7 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data_schema=vol.Schema(
                         {
                             vol.Required(group, default=enabled): selector.BooleanSelector()
-                            for group, enabled in CONF_SENSOR_GROUPS.items()
+                            for group, enabled in CONF_SENSORS_GROUPS.items()
                         }
                     ),
                     errors=errors,
@@ -177,7 +179,7 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_PROPERTY_ID: property_data["property_id"],
                     CONF_PROPERTY_ADDRESS: property_data["address"],
                 },
-                options=user_input,
+                options={ CONF_SENSORS_OPTIONS: user_input }
             )
 
         return self.async_show_form(
@@ -185,7 +187,7 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(group, default=enabled): selector.BooleanSelector()
-                    for group, enabled in CONF_SENSOR_GROUPS.items()
+                    for group, enabled in CONF_SENSORS_GROUPS.items()
                 }
             ),
             errors=errors,
@@ -279,14 +281,27 @@ class PowershopOptionsFlow(OptionsFlowWithReload):
     ) -> FlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+
+            return self.async_create_entry(
+                data={
+                    **self.config_entry.options,
+                    CONF_SENSORS_OPTIONS:
+                    { key: value for key, value in user_input.items() if key != CONF_REPROCESS_DATA},
+                    CONF_REPROCESS_DATA: bool(user_input[CONF_REPROCESS_DATA]),
+                }
+            )
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
                 {
-                    vol.Required(group, default=enabled): selector.BooleanSelector()
-                    for group, enabled in self.config_entry.options.items()
+                    **{
+                        vol.Required(group, default=enabled): selector.BooleanSelector()
+                        for group, enabled in sorted(
+                            self.config_entry.options.get(CONF_SENSORS_OPTIONS, CONF_SENSORS_GROUPS).items()
+                        )
+                    },
+                    vol.Required(CONF_REPROCESS_DATA, default=self.config_entry.options.get(CONF_REPROCESS_DATA, False)): selector.BooleanSelector(),
                 }
             ),
             errors=errors,
