@@ -607,14 +607,14 @@ class PowershopCoordinator(
             for timestamp, value in historical_data.items():
 
                 ts = datetime.fromisoformat(timestamp)
-                # if ts >= start_timestamp:
-                historical_data_filtered[float(ts.timestamp())] = value
-                    # last_timestamp = ts
+                if ts >= start_timestamp:
+                    historical_data_filtered[float(ts.timestamp())] = value
+                    last_timestamp = ts
             
-            # await self._stores["state"].async_save({
-            #     **self._stores["state"].data,
-            #     f"last_timestamp_{type}": last_timestamp.isoformat()
-            # })
+            await self._stores["state"].async_save({
+                **self._stores["state"].data,
+                f"last_timestamp_{type}": last_timestamp.isoformat()
+            })
 
         # await self._stores["usage"].async_save({})
         return historical_data_filtered
