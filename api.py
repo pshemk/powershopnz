@@ -17,7 +17,6 @@ from .const import (
     EMAIL_CONNECTOR_URL,
     OTP_VALIDATOR_URL,
     API_URL,
-    BRAND,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -384,7 +383,7 @@ class PowershopApiClient:
         session = await self._connect()
         payload = {
             "email": email,
-            "brand": BRAND,
+            "brand": "powershop",
             "redirectUrl": "https://app.powershop.nz",
             "journeyId": journey_id,
             "otpEnabled": True,
@@ -407,7 +406,7 @@ class PowershopApiClient:
         payload = {
             "email": email,
             "otp": otp,
-            "brand": BRAND,
+            "brand": "powershop",
             "journeyId": journey_id,
         }
         async with session.post(
@@ -576,7 +575,6 @@ class PowershopApiClient:
             if not edges or len(edges) == 0:
                 break
             for node in edges:
-                _LOGGER.debug(f"node: {node}")
                 powerpacks_data.append(
                     {
                         "id": node["node"]["id"],

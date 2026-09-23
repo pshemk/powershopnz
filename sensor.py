@@ -134,7 +134,7 @@ SENSORS_GENERIC = [
     ),
     SensorEntityDescription(
         key='powerpacks_available_balance',
-        name='Powerpacks - available balance',
+        name='Powerpacks: available balance',
         native_unit_of_measurement=CURRENCY_DOLLAR,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -143,7 +143,7 @@ SENSORS_GENERIC = [
     ),
     SensorEntityDescription(
         key='powerpacks_future_balance',
-        name='Powerpacks - future balance',
+        name='Powerpacks: future balance',
         native_unit_of_measurement=CURRENCY_DOLLAR,
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -266,7 +266,7 @@ async def async_setup_entry(
     coordinator: PowershopCoordinator = config_entry.runtime_data.coordinator
 
     _LOGGER.debug("in sensor async_setup_entry")
-    #get list of rates to turn into sensors
+    #get the list of rates to turn into sensors
     rate_types = await coordinator.get_rate_types()
 
     #Create rate-related sensors, they vary between regions and lines companies
@@ -297,7 +297,7 @@ async def async_setup_entry(
         for sensor in SENSORS_HISTORICAL if config_entry.options.get(CONF_SENSORS_OPTIONS, {}).get(_sensor_to_group(sensor.key)) == True
     )
 
-    #Historical sensor per rate
+    #Historical sensor per rate - no current state
     async_add_entities(
         PowershopHistoricalSensor(coordinator, 
         SensorEntityDescription(

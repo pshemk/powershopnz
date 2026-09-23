@@ -340,8 +340,8 @@ class PowershopCoordinator(
                 })
                 self._process_usage_data = True
             else:
-                #only fetch new data
-                last_usage_date = self._stores["state"].data.get("last_usage_date")
+                #only fetch new data (4 days earlier than last recorded, to allow for filling in the gaps)
+                last_usage_date = (datetime.strptime(self._stores["state"].data.get("last_usage_date"), "%Y-%m-%d") - timedelta(days=4)).strftime("%Y-%m-%d")
                 _LOGGER.debug("Fetching usage data after %s", last_usage_date)
                 usage = await self._api_client.get_usage(
                     self._account_id, self._property_id, last_usage_date

@@ -42,7 +42,7 @@ SENSORS_GROUPS_MAP = {
 
 
 #Used for checking for changes in Powerpack balances and usage data availability
-DEFAULT_UPDATE_INTERVAL = 60       #1 min
+DEFAULT_UPDATE_INTERVAL = 30      #30
 DEFAULT_API_CALL_INTERVAL = 300    #5 mins
 
 
@@ -53,5 +53,4 @@ FIREBASE_REFRESH_URL = "https://securetoken.googleapis.com/v1/token"
 EMAIL_CONNECTOR_URL = "https://auth.powershop.nz/cf/email-connector"
 OTP_VALIDATOR_URL = "https://auth.powershop.nz/cf/email-otp-authenticator"
 API_URL = "https://api.powershop.nz/v1/graphql/"
-BRAND = "powershop"
-BRAND_UC = "POWERSHOP"
+
