@@ -26,40 +26,40 @@ Sensors can be disabled vie the options menu.
 
 ## Sensors
 
-The integration provides the following regular sensors. 
+The integration provides the following regular sensors. All entities are in the `sensor.` domain.
 
 | Name | Entity | Description | Unit | Update freqency|
 |------|--------|-------------|------|-------------|
-| Billing period cost: Effective Total |  `sensor.powershopnz_billing_period_cost_total_effective` | The cost of electricity in current billing period including powerpacks discounts | NZD | 10 mins | 
-| Billing period cost: Nominal Total | `sensor.powershopnz_billing_period_cost_total_nominal` | The cost of electricity in current billing period using nominal pricing | NZD | 10 mins | 
-| Billing period days so far | `sensor.powershopnz_billing_period_usage_daily_charge` | Number of days in the billing period with usage data so far | days | 10 mins | 
-| Billing period usage: Total | `sensor.powershopnz_billing_period_usage_total` | Total power usage in the current billing period | kWh | 10 mins | 
-| Billing period usage: Rate name | `sensor.powershopnz_billing_period_usage_[*rate_name*]` | Total power usage in the current  billing period during given rate period | kWh | 10 mins | 
-| Current billing period start date | `sensor.powershopnz_current_billing_period_start_date` | The first timestamp of the current billing period | date-time | 5 mins | 
-| Current billing period end date | `sensor.powershopnz_current_billing_period_end_date` | The last timestamp of the current biilling period | date-time | 5 mins |
-| Next billing date | `sensor.powershopnz_current_next_billing_date` | The first timestamp of the next billing period | date-time | 5 mins | 
-| Current rate type | `sensor.powershopnz_unit_rate_type` | Current rate type (peak, off-peak, night, etc) | 30 sec | 
-| Daily charge | `sensor.powershopnz_daily_charge` | Daily charge | NZD | 5 mins | 
-| Effective cost ratio | `sensor.powershopnz_effective_cost_ratio` | The proportion of the nominal cost of the units of power including powerpacks discounts | no unit | 10 mins | 
-| Effective rate | `sensor.powershopnz_effective_unit_cost` | The cost of units of power including powerpacks discounts at current time| NZD |  10 mins | 
-| Effective rate: Rate name | `sensor.powershopnz_effective_unit_cost_[*rate_name*]` | The cost of units of power including powerpacks discounts during given rate period | NZD | 10 mins |
-| Nominal rate | `sensor.powershopnz_nominal_unit_cost` | The cost of units of power using nominal pricing at current time| NZD | 5 mins | 
-| Nominal rate: Rate name | `sensor.powershopnz_nominal_unit_cost_[*rate_name*]` | The cost of units of power using nominal pricing during given rate period | NZD | 5 mins | 
-| Powerpacks: available balance | `sensor.powershopnz_powerpacks_available_balance` | The sum value of currently available powerpacks | NZD | 5 mins |
-| Powerpacks: future balance | `sensor.powershopnz_powerpacks_future_balance` | The sum value of powerpacks that will be available in future | NZD | 5 mins |
-| Previous billing period cost: Effective Total |  `sensor.powershopnz_prevoius_billing_period_cost_total_effective` | The cost of electricity in previous billing period including powerpacks discounts | NZD | 10 mins | 
-| Previous billing period cost: Nominal Total | `sensor.powershopnz_previous_billing_period_cost_total_nominal` | The cost of electricity in previous billing period using nominal pricing | NZD | 10 mins | 
-| Previous billing period usage: Total | `sensor.powershopnz_prevoius_billing_period_usage_total` | Total power usage in the previous billing period | kWh | 10 mins | 
+| Billing period cost: Effective Total |  `powershopnz_billing_period_cost_total_effective` | The cost of electricity in current billing period including powerpacks discounts | NZD | 10 mins | 
+| Billing period cost: Nominal Total | `powershopnz_billing_period_cost_total_nominal` | The cost of electricity in current billing period using nominal pricing | NZD | 10 mins | 
+| Billing period days so far | `powershopnz_billing_period_usage_daily_charge` | Number of days in the billing period with usage data so far | days | 10 mins | 
+| Billing period usage: Total | `powershopnz_billing_period_usage_total` | Total power usage in the current billing period | kWh | 10 mins | 
+| Billing period usage: Rate name | `powershopnz_billing_period_usage_[*rate_name*]` | Total power usage in the current  billing period during given rate period | kWh | 10 mins | 
+| Current billing period start date | `powershopnz_current_billing_period_start_date` | The first timestamp of the current billing period | date-time | 5 mins | 
+| Current billing period end date | `powershopnz_current_billing_period_end_date` | The last timestamp of the current biilling period | date-time | 5 mins |
+| Next billing date | `powershopnz_current_next_billing_date` | The first timestamp of the next billing period | date-time | 5 mins | 
+| Current rate type | `powershopnz_unit_rate_type` | Current rate type (peak, off-peak, night, etc) | 30 sec | 
+| Daily charge | `powershopnz_daily_charge` | Daily charge | NZD | 5 mins | 
+| Effective cost ratio | `powershopnz_effective_cost_ratio` | The proportion of the nominal cost of the units of power including powerpacks discounts | no unit | 10 mins | 
+| Effective rate | `powershopnz_effective_unit_cost` | The cost of units of power including powerpacks discounts at current time| NZD |  10 mins | 
+| Effective rate: Rate name | `powershopnz_effective_unit_cost_[*rate_name*]` | The cost of units of power including powerpacks discounts during given rate period | NZD | 10 mins |
+| Nominal rate | `powershopnz_nominal_unit_cost` | The cost of units of power using nominal pricing at current time| NZD | 5 mins | 
+| Nominal rate: Rate name | `powershopnz_nominal_unit_cost_[*rate_name*]` | The cost of units of power using nominal pricing during given rate period | NZD | 5 mins | 
+| Powerpacks: available balance | `powershopnz_powerpacks_available_balance` | The sum value of currently available powerpacks | NZD | 5 mins |
+| Powerpacks: future balance | `powershopnz_powerpacks_future_balance` | The sum value of powerpacks that will be available in future | NZD | 5 mins |
+| Previous billing period cost: Effective Total |  `powershopnz_prevoius_billing_period_cost_total_effective` | The cost of electricity in previous billing period including powerpacks discounts | NZD | 10 mins | 
+| Previous billing period cost: Nominal Total | `powershopnz_previous_billing_period_cost_total_nominal` | The cost of electricity in previous billing period using nominal pricing | NZD | 10 mins | 
+| Previous billing period usage: Total | `powershopnz_prevoius_billing_period_usage_total` | Total power usage in the previous billing period | kWh | 10 mins | 
 
 
 In addition to the sensors above the following sensors are also created. They are used to store the historical values based on usage pulled using the API. Since the API doesn't return current (or up to date) values these sensors always report their values as `unknown`, but they provide all the statistical values and can be used for graphing (or in the energy dashboard). The resolution of each sensor is 1h. Technically they only exist to provide a placeholder for the long-term statistics.
 
 | Name | Entity | Description | Unit |
 |------|--------|-------------|------|
-| Power cost | `sensor.powershopnz_historical_cost_total` | The total cost of energy (using nominal rates) | NZD | 
-|`Power cost Rate name | `sensor.powershopnz_historical_cost_[*rate_name*]` | The  cost of energy used during given rate period (using nominal rates) | NZD |
-| Power usage | `sensor.powershopnz_historical_usage_total` | The total usage of energy | kWh | 
-| Power usage Rate name | `sensor.powershopnz_historical_usage_[*rate_name*]` | The usage of energy  during given rate period | kWh |
+| Power cost | `powershopnz_historical_cost_total` | The total cost of energy (using nominal rates) | NZD | 
+|`Power cost Rate name | `powershopnz_historical_cost_[*rate_name*]` | The  cost of energy used during given rate period (using nominal rates) | NZD |
+| Power usage | `powershopnz_historical_usage_total` | The total usage of energy | kWh | 
+| Power usage Rate name | `powershopnz_historical_usage_[*rate_name*]` | The usage of energy  during given rate period | kWh |
 
 
 ## Notes
