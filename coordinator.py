@@ -193,9 +193,10 @@ class PowershopCoordinator(
         if self._stores["powerpacks"].data.get(day, {}).get("type", "") == "list":
             _LOGGER.debug("getting a list %s", day )
             return self._stores["powerpacks"].data.get(day, {}).get("powerpacks", [])
+
         if self._stores["powerpacks"].data.get(day, {}).get("type", "") == "reference":
             _LOGGER.debug("getting a reference to %s from %s", self._stores["powerpacks"].data.get(day, {}).get("same_as", ""), day)
-            return self._stores["powerpacks"].data.get(self._stores["powerpacks"].data.get(day, {}).get("same_as", ""), {}).get("list", [])  
+            return self._stores["powerpacks"].data.get(self._stores["powerpacks"].data.get(day, {}).get("same_as", ""), {}).get("powerpacks", [])  
 
     def _str_to_timestamp(self, data: dict[str, str]) -> dict[str, datetime]:
         """Convert stored ISO timestamp strings into datetime objects."""
@@ -286,7 +287,8 @@ class PowershopCoordinator(
                     powerpacks_by_date = {}
                     powerpacks = await self._api_client.get_powerpacks(self._account_id)
 
-                    day = self._any_to_timestamp(self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_start_date", "2100-01-01T00:00:00+00:00")).replace(hour=0, minute=0, second=0)
+                    #get all powerpacks for both previous and current billing periods
+                    day = self._any_to_timestamp(self._stores["billing_dates"].data.get("previous", {}).get("datetime", {}).get("billing_period_start_date", "2100-01-01T00:00:00+00:00")).replace(hour=0, minute=0, second=0)
 
                     last_balance = 0
                     last_day = ""
@@ -348,7 +350,7 @@ class PowershopCoordinator(
                 }, 
                 "daily_charge": self._stores["rates"].data.get(month).get("daily_charge").get("rate"),
                 **self._stores["powerpacks_balances"].data,
-                **self._str_to_timestamp(self._stores["billing_dates"].data.get("datetime")),
+                **{ f"current_{key}": value for key, value in self._str_to_timestamp(self._stores["billing_dates"].data.get("current", {}).get("datetime")).items() },
                 "nominal_unit_cost": current_rate,
                 "unit_rate_type": timeslot.replace("_", " ").title(),
                 "effective_unit_cost": effective_current_rate,
@@ -425,22 +427,27 @@ class PowershopCoordinator(
             )
 
             #Determine the start and end of the current billing period                
-            billing_period_start = self._any_to_timestamp(self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_start_date", "2100-01-01T00:00:00+00:00"))
-            billing_period_end = self._any_to_timestamp(self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_end_date", "1970-01-01T00:00:00+00:00"))
+            current_billing_period_start = self._any_to_timestamp(self._stores["billing_dates"].data.get("current", {}).get("datetime", {}).get("billing_period_start_date", "2100-01-01T00:00:00+00:00"))
+            current_billing_period_end = self._any_to_timestamp(self._stores["billing_dates"].data.get("current", {}).get("datetime", {}).get("billing_period_end_date", "1970-01-01T00:00:00+00:00"))
 
-            _LOGGER.debug(f"billing period start: {billing_period_start.isoformat()} billing period end: {billing_period_end.isoformat()}")                
+            #Determine the start and end of the previous billing period                
+            previous_billing_period_start = self._any_to_timestamp(self._stores["billing_dates"].data.get("previous", {}).get("datetime", {}).get("billing_period_start_date", "2100-01-01T00:00:00+00:00"))
+            previous_billing_period_end = self._any_to_timestamp(self._stores["billing_dates"].data.get("previous", {}).get("datetime", {}).get("billing_period_end_date", "1970-01-01T00:00:00+00:00"))
+
+
+            _LOGGER.debug(f"billing period start: {current_billing_period_start.isoformat()} billing period end: {current_billing_period_end.isoformat()}")                
             #make sure we have the start and end dates in the right order
-            if billing_period_start < billing_period_end:
-                billing_period_month = billing_period_start.strftime("%m")
-                billing_period_usage = 0
-                billing_period_cost = 0
-                billing_period_usage_by_rate = {
+            if current_billing_period_start < current_billing_period_end:
+                current_billing_period_month = current_billing_period_start.strftime("%m")
+                current_billing_period_usage = 0
+                current_billing_period_cost = 0
+                current_billing_period_usage_by_rate = {
                     rate: 0
                     for rate in self._stores["rates"].data.get(
-                        billing_period_month, {}
+                        current_billing_period_month, {}
                     ).keys()
                 }
-                billing_period_usage_by_rate.setdefault("daily_charge", 0)
+                current_billing_period_usage_by_rate.setdefault("daily_charge", 0)
 
                 #Usage - stores per 1h consumption, the timeslot is the 30min in the middle of the hour
                 #we fetch 30mins intervals, so two have to be summed up
@@ -450,7 +457,7 @@ class PowershopCoordinator(
                 usage_sensor_by_rate = {
                     rate: {}
                     for rate in self._stores["rates"].data.get(
-                        billing_period_month, {}
+                        current_billing_period_month, {}
                     ).keys()
                     if rate != "daily_charge"
                 }
@@ -469,14 +476,14 @@ class PowershopCoordinator(
                     usage_by_rate = usage_sensor_by_rate.setdefault(timeslot, {})
                     usage_by_rate[hour_ts] = usage_by_rate.get(hour_ts, 0) + value
 
-                    if billing_period_start <= hour_timestamp < billing_period_end:
-                        billing_period_usage += value
-                        billing_period_usage_by_rate[timeslot] = (
-                            billing_period_usage_by_rate.get(timeslot, 0) + value
+                    if current_billing_period_start <= hour_timestamp < current_billing_period_end:
+                        current_billing_period_usage += value
+                        current_billing_period_usage_by_rate[timeslot] = (
+                            current_billing_period_usage_by_rate.get(timeslot, 0) + value
                         )
                         if timestamp.date() != last_seen_date:
                             last_seen_date = timestamp.date()
-                            billing_period_usage_by_rate["daily_charge"] += 1
+                            current_billing_period_usage_by_rate["daily_charge"] += 1
 
 
                 #Cost - each 30mins segment must be costed indepedently and than the hour must be summed up
@@ -486,7 +493,7 @@ class PowershopCoordinator(
                 cost_sensor_by_rate = {
                     rate: {}
                     for rate in self._stores["rates"].data.get(
-                        billing_period_month, {}
+                        current_billing_period_month, {}
                     ).keys()
                     if rate != "daily_charge"
                 }
@@ -515,52 +522,161 @@ class PowershopCoordinator(
                             + daily_charge / 48
                         )
 
-                        if billing_period_start <= hour_timestamp < billing_period_end:
-                            billing_period_cost += unit_cost * value + daily_charge / 48
+                        if current_billing_period_start <= hour_timestamp < current_billing_period_end:
+                            current_billing_period_cost += unit_cost * value + daily_charge / 48
 
                 _LOGGER.debug(f"getting powerpacks for: {last_seen_date.strftime("%Y-%m-%d")}")
                 #Determine effective costs, by using the purchased powerpacks
-                powerpacks = list.copy(self._get_powerpacks(last_seen_date.strftime("%Y-%m-%d")))
-                _LOGGER.debug(f"powerpacks: {powerpacks}")
+                try:
+                    powerpacks = list.copy(self._get_powerpacks(last_seen_date.strftime("%Y-%m-%d")))
+                    # _LOGGER.debug(f"powerpacks: {powerpacks}")
 
-                amount_paid = 0
-                total_cost = billing_period_cost
-                while total_cost > 0 and len(powerpacks) > 0:
-                    powerpack = powerpacks.pop(0)
-                    if datetime.strptime(powerpack["availableFrom"], "%Y-%m-%d")  > datetime.now():
-                        continue
-                    if powerpack['balance'] <= 0:
-                        continue
-                    offset = min(powerpack['balance'], total_cost)
-                    _LOGGER.debug(
-                        "Using %s to offset $%.2f of the cost, ratio: %.2f",
-                        powerpack["name"],
-                        offset,
-                        powerpack["ratio"],
+                    current_amount_paid = 0
+                    total_cost = current_billing_period_cost
+                    while total_cost > 0 and len(powerpacks) > 0:
+                        powerpack = powerpacks.pop(0)
+                        if datetime.strptime(powerpack["availableFrom"], "%Y-%m-%d")  > datetime.now():
+                            continue
+                        if powerpack['balance'] <= 0:
+                            continue
+                        offset = min(powerpack['balance'], total_cost)
+                        _LOGGER.debug(
+                            "Using %s to offset $%.2f of the cost, ratio: %.2f",
+                            powerpack["name"],
+                            offset,
+                            powerpack["ratio"],
+                        )
+                        total_cost -= offset
+                        current_amount_paid += offset * powerpack["ratio"]
+                    
+                    _LOGGER.debug("Total paid for powerpacks: $%.2f", current_amount_paid)
+                    
+                    if total_cost > 0:
+                        current_amount_paid += total_cost
+                    
+                    total_consumption_cost = 0
+                    current_billing_rates = self._stores["rates"].data.get(current_billing_period_month, {})
+                    for rate in current_billing_rates:
+                        if rate != "daily_charge":
+                            total_consumption_cost += current_billing_period_usage_by_rate[rate] * current_billing_rates[rate]["rate"]
+
+                    current_daily_cost = current_billing_period_usage_by_rate["daily_charge"] * current_billing_rates.get("daily_charge", {}).get("rate", 0)
+
+                    current_final_ratio = (
+                        (current_amount_paid - current_daily_cost) / total_consumption_cost
+                        if total_consumption_cost
+                        else 1
                     )
-                    total_cost -= offset
-                    amount_paid += offset * powerpack["ratio"]
-                
-                _LOGGER.debug("Total paid for powerpacks: $%.2f", amount_paid)
-                
-                if total_cost > 0:
-                    amount_paid += total_cost
-                
-                total_consumption_cost = 0
-                billing_rates = self._stores["rates"].data.get(billing_period_month, {})
-                for rate in billing_rates:
-                    if rate != "daily_charge":
-                        total_consumption_cost += billing_period_usage_by_rate[rate] * billing_rates[rate]["rate"]
+                    _LOGGER.debug("Final ratio: %.2f", current_final_ratio)
+                except TypeError (e):
+                    _LOGGER.debug(f"Can't use powerpacks data: {e}")
 
-                daily_cost = billing_period_usage_by_rate["daily_charge"] * billing_rates.get("daily_charge", {}).get("rate", 0)
+            _LOGGER.debug(f"previous billing period start: {previous_billing_period_start.isoformat()} billing period end: {previous_billing_period_end.isoformat()}")                
+            #make sure we have the start and end dates in the right order
+            if previous_billing_period_start < previous_billing_period_end:
+                previous_billing_period_month = previous_billing_period_start.strftime("%m")
+                previous_billing_period_usage = 0
+                previous_billing_period_cost = 0
+                previous_billing_period_usage_by_rate = {
+                    rate: 0
+                    for rate in self._stores["rates"].data.get(
+                        previous_billing_period_month, {}
+                    ).keys()
+                }
+                previous_billing_period_usage_by_rate.setdefault("daily_charge", 0)
 
-                final_ratio = (
-                    (amount_paid - daily_cost) / total_consumption_cost
-                    if total_consumption_cost
-                    else 1
-                )
-                _LOGGER.debug("Final ratio: %.2f", final_ratio)
+                #Usage - stores per 1h consumption, the timeslot is the 30min in the middle of the hour
+                #we fetch 30mins intervals, so two have to be summed up
+                #also calulcate the sum for current billing period
 
+                last_seen_date = None
+                for ts, value in self._stores["usage"].data.items():
+                    timestamp = datetime.fromisoformat(ts)
+                    hour_timestamp = timestamp.replace(
+                        minute=30, second=0, microsecond=0
+                    )
+                    hour_ts = hour_timestamp.isoformat()
+                    timeslot = self._stores["rates_schedule"].data[
+                        timestamp.weekday()
+                    ][timestamp.hour * 2 + timestamp.minute // 30]
+
+                    if previous_billing_period_start <= hour_timestamp < previous_billing_period_end:
+                        previous_billing_period_usage += value
+                        previous_billing_period_usage_by_rate[timeslot] = (
+                            previous_billing_period_usage_by_rate.get(timeslot, 0) + value
+                        )
+                        if timestamp.date() != last_seen_date:
+                            last_seen_date = timestamp.date()
+                            previous_billing_period_usage_by_rate["daily_charge"] += 1
+
+
+                #Cost - each 30mins segment must be costed indepedently and than the hour must be summed up
+                #also calulcate the sum for the previous billing period
+
+                for ts, value in self._stores["usage"].data.items():
+                    timestamp = datetime.fromisoformat(ts)
+                    hour_timestamp = timestamp.replace(
+                        minute=30, second=0, microsecond=0
+                    )
+                    hour_ts = hour_timestamp.isoformat()
+
+                    #determine timeslot (assume no schedule changes)
+                    record_month = timestamp.strftime("%m")
+                    timeslot = self._stores["rates_schedule"].data[
+                        timestamp.weekday()
+                    ][timestamp.hour * 2 + timestamp.minute // 30]
+                    unit_cost = self._stores["rates"].data.get(record_month, {}).get(timeslot, {}).get("rate")
+                    if unit_cost:
+                        daily_charge = self._stores["rates"].data.get(record_month, {}).get("daily_charge", {}).get("rate", 0)
+
+                        if previous_billing_period_start <= hour_timestamp < previous_billing_period_end:
+                            previous_billing_period_cost += unit_cost * value + daily_charge / 48
+
+                _LOGGER.debug(f"getting powerpacks for: {last_seen_date.strftime("%Y-%m-%d")}")
+                #Determine effective costs, by using the purchased powerpacks
+                try:
+                    powerpacks = list.copy(self._get_powerpacks(last_seen_date.strftime("%Y-%m-%d")))
+                    # _LOGGER.debug(f"powerpacks: {powerpacks}")
+
+                    previous_amount_paid = 0
+                    previous_total_cost = previous_billing_period_cost
+                    while previous_total_cost > 0 and len(powerpacks) > 0:
+                        powerpack = powerpacks.pop(0)
+                        if datetime.strptime(powerpack["availableFrom"], "%Y-%m-%d")  > datetime.now():
+                            continue
+                        if powerpack['balance'] <= 0:
+                            continue
+                        offset = min(powerpack['balance'], previous_total_cost)
+                        _LOGGER.debug(
+                            "Using %s to offset $%.2f of the cost, ratio: %.2f",
+                            powerpack["name"],
+                            offset,
+                            powerpack["ratio"],
+                        )
+                        previous_total_cost -= offset
+                        previous_amount_paid += offset * powerpack["ratio"]
+                    
+                    _LOGGER.debug("Total paid for powerpacks: $%.2f", previous_amount_paid)
+                    
+                    if previous_total_cost > 0:
+                        previous_amount_paid += previous_total_cost
+                    
+                    previous_total_consumption_cost = 0
+                    previous_billing_rates = self._stores["rates"].data.get(previous_billing_period_month, {})
+                    for rate in previous_billing_rates:
+                        if rate != "daily_charge":
+                            previous_total_consumption_cost += previous_billing_period_usage_by_rate[rate] * previous_billing_rates[rate]["rate"]
+
+                    previous_daily_cost = previous_billing_period_usage_by_rate["daily_charge"] * previous_billing_rates.get("daily_charge", {}).get("rate", 0)
+
+                    previous_final_ratio = (
+                        (previous_amount_paid - previous_daily_cost) / previous_total_consumption_cost
+                        if previous_total_consumption_cost
+                        else 1
+                    )
+                    _LOGGER.debug("Previous Final ratio: %.2f", previous_final_ratio)
+                except TypeError (e):
+                    _LOGGER.debug(f"Can't use powerpacks data: {e}")
 
                 # Store all values, so the sensors get pull them out when needed
                 await self._stores["sensors"].async_save({
@@ -576,14 +692,17 @@ class PowershopCoordinator(
                         }                        
                     },
                     'regular': {
-                        'billing_period_cost_total_nominal': billing_period_cost,
-                        'billing_period_cost_total_effective': amount_paid,
-                        'billing_period_usage_total': billing_period_usage,
+                        'billing_period_cost_total_nominal': current_billing_period_cost,
+                        'billing_period_cost_total_effective': current_amount_paid,
+                        'billing_period_usage_total': current_billing_period_usage,
+                        'previous_billing_period_cost_total_nominal': previous_billing_period_cost,
+                        'previous_billing_period_cost_total_effective': previous_amount_paid,
+                        'previous_billing_period_usage_total': previous_billing_period_usage,
                         **{f"billing_period_usage_{key}": value
-                                    for key, value in billing_period_usage_by_rate.items()},
-                        **{f"effective_unit_cost_{key}": value.get("rate") * final_ratio
-                                    for key, value in billing_rates.items() if key != 'daily_charge'},
-                        'effective_cost_ratio': final_ratio,
+                                    for key, value in current_billing_period_usage_by_rate.items()},
+                        **{f"effective_unit_cost_{key}": value.get("rate") * current_final_ratio
+                                    for key, value in current_billing_rates.items() if key != 'daily_charge'},
+                        'effective_cost_ratio': current_final_ratio,
                     }
                 })
                 await self._stores["state"].async_save({

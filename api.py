@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from dateutil.relativedelta import relativedelta
 import logging
 from typing import Any
 import uuid
@@ -701,15 +702,30 @@ class PowershopApiClient:
             QUERY_BILLING_DATES, {"accountNumber": account_id}
         )        
 
+        next_billing_date = billing_dates_data.get("account", {}).get("billingOptions", {}).get("nextBillingDate", "1970-01-01")
+        billing_period_start_date = billing_dates_data.get("account", {}).get("billingOptions", {}).get("currentBillingPeriodStartDate", "1970-01-01")
+        billing_period_end_date = billing_dates_data.get("account", {}).get("billingOptions", {}).get("currentBillingPeriodEndDate", "1970-01-01")
         return {
-            "datetime": {
-                "next_billing_date": datetime.strptime(billing_dates_data.get("account", {}).get("billingOptions", {}).get("nextBillingDate", "1970-01-01" ), "%Y-%m-%d").replace(tzinfo=TIMEZONE),
-                "current_billing_period_start_date": datetime.strptime(billing_dates_data.get("account", {}).get("billingOptions", {}).get("currentBillingPeriodStartDate", "1970-01-01"), "%Y-%m-%d").replace(tzinfo=TIMEZONE),
-                "current_billing_period_end_date": datetime.strptime(billing_dates_data.get("account", {}).get("billingOptions", {}).get("currentBillingPeriodEndDate", "1970-01-01"), "%Y-%m-%d").replace(tzinfo=TIMEZONE, hour=23, minute=59, second=59),
+             "current": {
+                "datetime": {
+                    "next_billing_date": datetime.strptime(next_billing_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE),
+                    "billing_period_start_date": datetime.strptime(billing_period_start_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE),
+                    "billing_period_end_date": datetime.strptime(billing_period_end_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE, hour=23, minute=59, second=59),
+                },
+                "string":{
+                    "next_billing_date": next_billing_date, 
+                    "billing_period_start_date": billing_period_start_date,
+                    "billing_period_end_date": billing_period_end_date,
+                }
             },
-            "string":{
-                "next_billing_date": billing_dates_data.get("account", {}).get("billingOptions", {}).get("nextBillingDate", "1970-01-01" ), 
-                "current_billing_period_start_date": billing_dates_data.get("account", {}).get("billingOptions", {}).get("currentBillingPeriodStartDate", "1970-01-01"),
-                "current_billing_period_end_date": billing_dates_data.get("account", {}).get("billingOptions", {}).get("currentBillingPeriodEndDate", "1970-01-01"),
+             "previous": {
+                "datetime": {
+                    "billing_period_start_date": datetime.strptime(billing_period_start_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE) - relativedelta(months=1),
+                    "billing_period_end_date": datetime.strptime(billing_period_end_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE, hour=23, minute=59, second=59) - relativedelta(months=1),
+                },
+                "string":{
+                    "billing_period_start_date": (datetime.strptime(billing_period_start_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE) - relativedelta(months=1)).strftime("%Y-%m-%d"),
+                    "billing_period_end_date": (datetime.strptime(billing_period_end_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE, hour=23, minute=59, second=59) - relativedelta(months=1)).strftime("%Y-%m-%d")
+                }
             }
         }
