@@ -189,6 +189,14 @@ class PowershopCoordinator(
             *(store.async_load() for store in self._stores.values())
         )
 
+    def _get_powerpacks(self, day: str) -> list[dict[str, Any]]:
+        if self._stores["powerpacks"].data.get(day, {}).get("type", "") == "list":
+            _LOGGER.debug("getting a list %s", day )
+            return self._stores["powerpacks"].data.get(day, {}).get("powerpacks", [])
+        if self._stores["powerpacks"].data.get(day, {}).get("type", "") == "reference":
+            _LOGGER.debug("getting a reference to %s from %s", self._stores["powerpacks"].data.get(day, {}).get("same_as", ""), day)
+            return self._stores["powerpacks"].data.get(self._stores["powerpacks"].data.get(day, {}).get("same_as", ""), {}).get("list", [])  
+
     def _str_to_timestamp(self, data: dict[str, str]) -> dict[str, datetime]:
         """Convert stored ISO timestamp strings into datetime objects."""
 
@@ -197,6 +205,17 @@ class PowershopCoordinator(
             for k, v in data.items() if isinstance(v, str)
         }
 
+    def _any_to_timestamp(self, in_timestamp: str) -> datetime:
+        if isinstance(in_timestamp, datetime):
+            return in_timestamp
+        if isinstance(in_timestamp, (str)):
+            return datetime.fromisoformat(in_timestamp)
+        if isinstance(in_timestamp, (int, float)):
+            return datetime.fromtimestamp(in_timestamp, dt_util.get_time_zone("Pacific/Auckland"))
+        
+        _LOGGER.debug("Can't convert date of type %s", type(in_timestamp))
+        return datetime.fromtimestamp(0, dt_util.get_time_zone("Pacific/Auckland"))
+ 
     async def _async_update_data(
         self,
     ) -> dict[str, Any]:
@@ -237,16 +256,6 @@ class PowershopCoordinator(
                 if self._stores["state"].data.get("last_rates_refresh") != today:
                     refresh_rates = True
 
-                if not self._stores["powerpacks"].data  or refresh_powerpacks:
-                    #get all powerpacks
-                    _LOGGER.debug("Updating powerpacks")
-                    powerpacks = await self._api_client.get_powerpacks(self._account_id)
-                    powerpacks.sort(key=lambda x: x['ratio'], reverse=False)
-                    await self._stores["powerpacks"].async_save(powerpacks)
-
-                    #force reprocessing of the billing data
-                    await self._schedule_usage_process()
-                
                 if refresh_rates:
                     #get rates and rates schedules/timeslots
                     _LOGGER.debug("Updating rates")
@@ -270,6 +279,47 @@ class PowershopCoordinator(
                         **self._stores["state"].data,
                         "last_rates_refresh": today
                     })
+
+                if not self._stores["powerpacks"].data  or refresh_powerpacks:
+                    #get all powerpacks
+                    _LOGGER.debug("Updating powerpacks")
+                    powerpacks_by_date = {}
+                    powerpacks = await self._api_client.get_powerpacks(self._account_id)
+
+                    day = self._any_to_timestamp(self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_start_date", "2100-01-01T00:00:00+00:00")).replace(hour=0, minute=0, second=0)
+
+                    last_balance = 0
+                    last_day = ""
+                    while day < now: 
+                        
+                        powerpacks_purchased = []
+                        balance = 0
+                        
+                        for powerpack in powerpacks:
+                            if datetime.fromisoformat(powerpack["purchasedAt"]) < day:
+                                balance += powerpack["balance"]
+                                powerpacks_purchased.append(powerpack)
+
+                        powerpacks_purchased.sort(key=lambda x: x['ratio'], reverse=False)
+                        if balance != last_balance:
+                            powerpacks_by_date[day.strftime("%Y-%m-%d")] = {
+                                "type": "list",
+                                "powerpacks": powerpacks_purchased
+                            }
+                            last_balance = balance
+                            last_day = day.strftime("%Y-%m-%d")
+                        else:
+                            powerpacks_by_date[day.strftime("%Y-%m-%d")] = {
+                                "type": "reference",
+                                "same_as": last_day
+                            }
+                        day += timedelta(days=1)
+
+                    await self._stores["powerpacks"].async_save(powerpacks_by_date)
+
+                    #force reprocessing of the billing data
+                    await self._schedule_usage_process()
+                
 
                     
                 # Store refresh_token if needed
@@ -375,33 +425,8 @@ class PowershopCoordinator(
             )
 
             #Determine the start and end of the current billing period                
-            billing_period_start = self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_start_date", "2100-01-01T00:00:00+00:00") 
-            billing_period_end = self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_end_date", "1970-01-01T00:00:00+00:00") 
-
-
-            #the store class doesn't handle timestamps - depending where they come from they might be timestamps, ints/floats or strings
-            #convert here
-            if isinstance(billing_period_start, datetime):
-                pass
-            elif isinstance(billing_period_start, (str)):
-                billing_period_start = datetime.fromisoformat(billing_period_start)
-            elif isinstance(billing_period_start, (int, float)):
-                billing_period_start = datetime.fromtimestamp(billing_period_start, dt_util.get_time_zone("Pacific/Auckland"))
-            else:
-                _LOGGER.debug("Billing start date type: %s", type(billing_period_start))
-                billing_period_start = datetime.fromtimestamp(0, dt_util.get_time_zone("Pacific/Auckland"))
-            
-            if isinstance(billing_period_end, datetime):
-                pass
-            elif isinstance(billing_period_end, (str)):
-                billing_period_end = datetime.fromisoformat(billing_period_end)
-            elif isinstance(billing_period_end, (int, float)):
-                billing_period_end = datetime.fromtimestamp(billing_period_end, dt_util.get_time_zone("Pacific/Auckland"))
-            else:
-                _LOGGER.debug("Billing end date type: %s", type(billing_period_end))
-                billing_period_end = datetime.fromtimestamp(
-                    0, dt_util.get_time_zone("Pacific/Auckland")
-                )
+            billing_period_start = self._any_to_timestamp(self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_start_date", "2100-01-01T00:00:00+00:00"))
+            billing_period_end = self._any_to_timestamp(self._stores["billing_dates"].data.get("datetime", {}).get("current_billing_period_end_date", "1970-01-01T00:00:00+00:00"))
 
             _LOGGER.debug(f"billing period start: {billing_period_start.isoformat()} billing period end: {billing_period_end.isoformat()}")                
             #make sure we have the start and end dates in the right order
@@ -493,8 +518,10 @@ class PowershopCoordinator(
                         if billing_period_start <= hour_timestamp < billing_period_end:
                             billing_period_cost += unit_cost * value + daily_charge / 48
 
+                _LOGGER.debug(f"getting powerpacks for: {last_seen_date.strftime("%Y-%m-%d")}")
                 #Determine effective costs, by using the purchased powerpacks
-                powerpacks = list.copy(self._stores["powerpacks"].data)
+                powerpacks = list.copy(self._get_powerpacks(last_seen_date.strftime("%Y-%m-%d")))
+                _LOGGER.debug(f"powerpacks: {powerpacks}")
 
                 amount_paid = 0
                 total_cost = billing_period_cost
