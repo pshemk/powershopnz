@@ -229,6 +229,15 @@ SENSORS_PER_RATE = [
         suggested_display_precision=2,
         icon="mdi:home-lightning-bolt-outline",        
     ),
+    SensorEntityDescription(
+        key='previous_billing_period_usage',
+        name='Previous billing period usage: ',
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        icon="mdi:home-lightning-bolt-outline",        
+    ),    
 ]
 
 SENSORS_HISTORICAL = [

@@ -76,17 +76,20 @@ The statistics are always with 1h resolution, but due to the way they're loaded 
 
 The billing period always rolls over into the next one before all data is available (powerpacks are "consumed" on the last day of the billing cycle when there's still no usage information). The billing period data then become available in the 'Previous billing' sensors. 
 
+The way power is priced varies widely across the country. The types of rates as well as meter setups are different between different local lines companies. I live in West Auckalnd on Vector's network and that's what I've been testing with. If you're in a different part of the country and the integration doesn't work for you - please open an issue. 
+
 ## Known issues
 
 1. Switching between rates (peak/off-peak) doesn't happen at exact times. The integration updates the sensor with the current rate type every 30 seconds. 
 2. Historical data that's loaded into statistics (like past power usage or past cost) can not be updated once stored. Since Powershop doesn't always release past usage information in chronological order newer data always blocks older data from being stored, that leads to gaps in the statistcs. So far I have not found a user-friendly workaround. Deleting the integration does not delete the statistics from Home Assistant either. The only way to delete them right now is to delete them from the database directly. 
-3. The past costs are only calucated starting from the month when the integartion was installed. This is because only current (i.e. this month's) rates are available thorugh the API. Once stored the rates are kept for future use
-4. Past costs are calculated when the integration starts, but some of the data (like powerpacks already used in the past) is not available, so this number will not be accurate untill the whole billing period rolls over
+3. The accuracy of past information is not great initially. That's because a lot of historical information (like past rates or alrady consumed powerpacks) are not accessible via the API. This integration stores all the information as the time progresses and after two full billing cycles the past usage and pricing will be accurate. 
+
 
 
 ## Examples 
 
 
+## Releases
 
 ### v1.0.0 (2026-09-25)
 - First release

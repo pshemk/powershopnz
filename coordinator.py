@@ -700,6 +700,9 @@ class PowershopCoordinator(
                         'previous_billing_period_usage_total': previous_billing_period_usage,
                         **{f"billing_period_usage_{key}": value
                                     for key, value in current_billing_period_usage_by_rate.items()},
+                        **{f"previous_billing_period_usage_{key}": value
+                                    for key, value in previous_billing_period_usage_by_rate.items()},
+
                         **{f"effective_unit_cost_{key}": value.get("rate") * current_final_ratio
                                     for key, value in current_billing_rates.items() if key != 'daily_charge'},
                         'effective_cost_ratio': current_final_ratio,
