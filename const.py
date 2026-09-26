@@ -35,7 +35,8 @@ SENSORS_GROUPS_MAP = {
     "effective_unit": "effective_rates",
     "effective_cost_ratio": "effective_rates",
     "historical_usage": "historical_usage",
-    "historical_cost": "historical_cost",
+    "historical_cost":  "historical_cost",
+    "historical_nominal_cost":  "historical_cost",
     "powerpacks": "powerpacks",
 }
 

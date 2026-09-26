@@ -251,8 +251,8 @@ SENSORS_HISTORICAL = [
         icon="mdi:chart-bar",
     ),
     SensorEntityDescription(
-        key='historical_cost_total',
-        name='Power cost',
+        key='historical_nominal_cost_total',
+        name='Nominal power cost',
         native_unit_of_measurement=CURRENCY_DOLLAR,
         # device_class=SensorDeviceClass.MEASUREMENT,
         state_class=SensorStateClass.TOTAL,
@@ -272,8 +272,8 @@ SENSORS_HISTORICAL_PER_RATE = [
         icon="mdi:chart-bar-stacked",        
     ),
     SensorEntityDescription(
-        key='historical_cost',
-        name='Power cost',
+        key='historical_nominal_cost',
+        name='Nominal poower cost',
         native_unit_of_measurement=CURRENCY_DOLLAR,
         # device_class=SensorDeviceClass.MEASUREMENT,
         state_class=SensorStateClass.TOTAL,
@@ -387,6 +387,13 @@ class PowershopSensor(CoordinatorEntity[PowershopCoordinator], SensorEntity):
 
         # _LOGGER.debug(f"returning data: for {self._key}: " + str(self.coordinator.data.get(self._key)))
         return self.coordinator.data.get(self._key)
+
+    @property
+    def extra_state_attributes(self) -> Dict():
+        if not self.coordinator.data:
+            return None
+        # _LOGGER.debug(f"returning attriburtes for {self._key} ")
+        return self.coordinator.data.get(f"attributes_{self._key}", {})
 
 class PowershopHistoricalSensor(CoordinatorEntity[PowershopCoordinator], HistoricalSensor,SensorEntity):
     """A sensor that reads historical data from the coordinator"""

@@ -217,6 +217,7 @@ class PowershopCoordinator(
         _LOGGER.debug("Can't convert date of type %s", type(in_timestamp))
         return datetime.fromtimestamp(0, dt_util.get_time_zone("Pacific/Auckland"))
  
+    # def _calculate_effective_cost(self, date: datetime, billing_period_cost, )
     async def _async_update_data(
         self,
     ) -> dict[str, Any]:
@@ -344,6 +345,8 @@ class PowershopCoordinator(
             current_rate = self._stores["rates"].data.get(month).get(timeslot).get("rate")
             effective_current_rate = current_rate * self._stores["sensors"].data.get("regular", {}).get("effective_cost_ratio", 1)
 
+            #return all the sensors calculates above and read from the sensors store
+            #return attributes as well
             return { 
                 **{
                     f"nominal_unit_cost_{rate}": rate_details["rate"] for rate, rate_details in self._stores["rates"].data.get(month).items() if rate_details["type"] == "CONSUMPTION_CHARGE"
@@ -354,7 +357,10 @@ class PowershopCoordinator(
                 "nominal_unit_cost": current_rate,
                 "unit_rate_type": timeslot.replace("_", " ").title(),
                 "effective_unit_cost": effective_current_rate,
-                **self._stores["sensors"].data.get("regular", {})
+                **self._stores["sensors"].data.get("regular", {}),
+                **{
+                    f"attributes_{key}": value for key, value in self._stores["sensors"].data.get("attributes", {}).items()
+                }
             }
         except Exception:
             _LOGGER.exception(
@@ -512,9 +518,9 @@ class PowershopCoordinator(
 
                 #Cost - each 30mins segment must be costed indepedently and than the hour must be summed up
                 #also calulcate the sum for current billing period
-                cost_sensor_total = {}
+                nominal_cost_sensor_total = {}
 
-                cost_sensor_by_rate = {
+                nominal_cost_sensor_by_rate = {
                     rate: {}
                     for rate in self._stores["rates"].data.get(
                         current_billing_period_month, {}
@@ -537,11 +543,11 @@ class PowershopCoordinator(
                     unit_cost = self._stores["rates"].data.get(record_month, {}).get(timeslot, {}).get("rate")
                     if unit_cost:
                         daily_charge = self._stores["rates"].data.get(record_month, {}).get("daily_charge", {}).get("rate", 0)
-                        cost_sensor_total[hour_ts] = cost_sensor_total.get(hour_ts, 0) + unit_cost * value + daily_charge / 48
+                        nominal_cost_sensor_total[hour_ts] = nominal_cost_sensor_total.get(hour_ts, 0) + unit_cost * value + daily_charge / 48
 
-                        cost_by_rate = cost_sensor_by_rate.setdefault(timeslot, {})
-                        cost_by_rate[hour_ts] = (
-                            cost_by_rate.get(hour_ts, 0)
+                        nominal_cost_by_rate = nominal_cost_sensor_by_rate.setdefault(timeslot, {})
+                        nominal_cost_by_rate[hour_ts] = (
+                            nominal_cost_by_rate.get(hour_ts, 0)
                             + unit_cost * value
                             + daily_charge / 48
                         )
@@ -561,6 +567,7 @@ class PowershopCoordinator(
 
                     current_amount_paid = 0
                     total_cost = current_billing_period_cost
+                    current_powerpacks_used = ""
                     while total_cost > 0 and len(powerpacks) > 0:
                         powerpack = powerpacks.pop(0)
                         if datetime.strptime(powerpack["availableFrom"], "%Y-%m-%d")  > datetime.now():
@@ -568,8 +575,9 @@ class PowershopCoordinator(
                         if powerpack['balance'] <= 0:
                             continue
                         offset = min(powerpack['balance'], total_cost)
+                        current_powerpacks_used += f"Using {powerpack["name"]} to offset ${offset:.2f} of the cost (ratio: {powerpack["ratio"]:.2f})\n"
                         _LOGGER.debug(
-                            "Using %s to offset $%.2f of the cost, ratio: %.2f",
+                            "Using %s to offset $%.2f of the cost (ratio: %.2f)",
                             powerpack["name"],
                             offset,
                             powerpack["ratio"],
@@ -616,7 +624,7 @@ class PowershopCoordinator(
                             continue
                         offset = min(powerpack['balance'], previous_total_cost)
                         _LOGGER.debug(
-                            "Using %s to offset $%.2f of the cost, ratio: %.2f",
+                            "Using %s to offset $%.2f of the cost (ratio: %.2f)",
                             powerpack["name"],
                             offset,
                             powerpack["ratio"],
@@ -651,12 +659,12 @@ class PowershopCoordinator(
                     **self._stores["sensors"].data,
                     'historical': {
                         'historical_usage_total': usage_sensor_total,
-                        'historical_cost_total': cost_sensor_total,
+                        'historical_nominal_cost_total': nominal_cost_sensor_total,
                         **{
                             f"historical_usage_{key}": value for key, value in usage_sensor_by_rate.items()
                         },
                         **{
-                            f"historical_cost_{key}": value for key, value in cost_sensor_by_rate.items()
+                            f"historical_nominal_cost_{key}": value for key, value in nominal_cost_sensor_by_rate.items()
                         }                        
                     },
                     'regular': {
@@ -674,6 +682,11 @@ class PowershopCoordinator(
                         **{f"effective_unit_cost_{key}": value.get("rate") * current_final_ratio
                                     for key, value in current_billing_rates.items() if key != 'daily_charge'},
                         'effective_cost_ratio': current_final_ratio,
+                    },
+                    'attributes':{
+                        'billing_period_cost_total_effective': { 
+                            "powerpacks": current_powerpacks_used 
+                        }
                     }
                 })
                 await self._stores["state"].async_save({
