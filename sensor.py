@@ -259,6 +259,15 @@ SENSORS_HISTORICAL = [
         icon="mdi:chart-bar",
         suggested_display_precision=2,
     ),    
+    SensorEntityDescription(
+        key='historical_effective_cost_total',
+        name='Effective power cost',
+        native_unit_of_measurement=CURRENCY_DOLLAR,
+        # device_class=SensorDeviceClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL,
+        icon="mdi:chart-bar",
+        suggested_display_precision=2,
+    ),        
 ]
 
 SENSORS_HISTORICAL_PER_RATE = [

@@ -200,11 +200,11 @@ class PowershopCoordinator(
                 break
 
         if self._stores["powerpacks"].data.get(day, {}).get("type", "") == "list":
-            _LOGGER.debug("getting a list %s", day )
+            # _LOGGER.debug("getting a list %s", day )
             return self._stores["powerpacks"].data.get(day, {}).get("powerpacks", [])
 
         if self._stores["powerpacks"].data.get(day, {}).get("type", "") == "reference":
-            _LOGGER.debug("getting a reference to %s from %s", self._stores["powerpacks"].data.get(day, {}).get("same_as", ""), day)
+            # _LOGGER.debug("getting a reference to %s from %s", self._stores["powerpacks"].data.get(day, {}).get("same_as", ""), day)
             return self._stores["powerpacks"].data.get(self._stores["powerpacks"].data.get(day, {}).get("same_as", ""), {}).get("powerpacks", [])  
 
     def _str_to_timestamp(self, data: dict[str, str]) -> dict[str, datetime]:
@@ -226,7 +226,38 @@ class PowershopCoordinator(
         _LOGGER.debug("Can't convert date of type %s", type(in_timestamp))
         return datetime.fromtimestamp(0, dt_util.get_time_zone("Pacific/Auckland"))
  
-    # def _calculate_effective_cost(self, date: datetime, billing_period_cost, )
+    def _calculate_effective_cost(self, day: str, billing_period_day: int,  billing_period_cost: float) -> dict[str, Any]: 
+
+        #Determine effective costs, by using the purchased powerpacks
+        powerpacks = list.copy(self._get_powerpacks(day))
+
+        amount_paid = 0
+        total_cost = billing_period_cost
+        powerpacks_used = ""
+        while total_cost > 0 and len(powerpacks) > 0:
+            powerpack = powerpacks.pop(0)
+            if datetime.strptime(powerpack["availableFrom"], "%Y-%m-%d")  > datetime.now():
+                continue
+            if powerpack['balance'] <= 0:
+                continue
+            offset = min(powerpack['balance'], total_cost)
+            powerpacks_used += f"{powerpack["name"]} offsets ${offset:.2f} (ratio: {powerpack["ratio"]:.2f})\n"
+            total_cost -= offset
+            amount_paid += offset * powerpack["ratio"]
+                
+        if total_cost > 0:
+            amount_paid += total_cost
+        
+        consumption_cost = 0
+        billing_rates = self._stores["rates"].data.get(datetime.strptime(day, "%Y-%m-%d").strftime("%m"), {})
+        daily_cost = billing_period_day * billing_rates.get("daily_charge", {}).get("rate", 0)
+
+        final_ratio = (amount_paid - daily_cost) / (billing_period_cost - daily_cost)
+        
+        # _LOGGER.debug(f"day {day} paid: {amount_paid} cost: {billing_period_cost:.2f}, dc: {daily_cost:.2f}, r: {final_ratio}")
+        return final_ratio, amount_paid, powerpacks_used
+
+
     async def _async_update_data(
         self,
     ) -> dict[str, Any]:
@@ -447,6 +478,8 @@ class PowershopCoordinator(
                 self._stores["state"].data.get("last_processed_date"),
             )
 
+            now = dt_util.now()
+
             #Determine the start and end of the current billing period                
             current_billing_period_start = self._any_to_timestamp(self._stores["billing_dates"].data.get("current", {}).get("datetime", {}).get("billing_period_start_date", "2100-01-01T00:00:00+00:00"))
             current_billing_period_end = self._any_to_timestamp(self._stores["billing_dates"].data.get("current", {}).get("datetime", {}).get("billing_period_end_date", "1970-01-01T00:00:00+00:00"))
@@ -530,10 +563,13 @@ class PowershopCoordinator(
                             previous_last_seen_date = timestamp.date()
                             previous_billing_period_usage_by_rate["daily_charge"] += 1
 
-
                 #Cost - each 30mins segment must be costed indepedently and than the hour must be summed up
                 #also calulcate the sum for current billing period
                 nominal_cost_sensor_total = {}
+                nominal_cost_daily_total = {}
+                nominal_cost_previous_billing_period_by_day = {}
+                nominal_cost_current_billing_period_by_day = {}
+                effective_cost_sensor_total = {}
 
                 nominal_cost_sensor_by_rate = {
                     rate: {}
@@ -548,7 +584,11 @@ class PowershopCoordinator(
                     hour_timestamp = timestamp.replace(
                         minute=30, second=0, microsecond=0
                     )
+                    day_timestamp = timestamp.replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    )
                     hour_ts = hour_timestamp.isoformat()
+                    day_ts = day_timestamp.strftime("%Y-%m-%d")
 
                     #determine timeslot (assume no schedule changes)
                     record_month = timestamp.strftime("%m")
@@ -559,6 +599,7 @@ class PowershopCoordinator(
                     if unit_cost:
                         daily_charge = self._stores["rates"].data.get(record_month, {}).get("daily_charge", {}).get("rate", 0)
                         nominal_cost_sensor_total[hour_ts] = nominal_cost_sensor_total.get(hour_ts, 0) + unit_cost * value + daily_charge / 48
+                        nominal_cost_daily_total[day_ts] = nominal_cost_daily_total.get(day_ts, 0) + unit_cost * value + daily_charge / 48
 
                         nominal_cost_by_rate = nominal_cost_sensor_by_rate.setdefault(timeslot, {})
                         nominal_cost_by_rate[hour_ts] = (
@@ -573,101 +614,51 @@ class PowershopCoordinator(
                         if previous_billing_period_start <= hour_timestamp < previous_billing_period_end:
                             previous_billing_period_cost += unit_cost * value + daily_charge / 48
 
+                #calculate the incremental cost starting from the beginning of the previous billing period
+                day = previous_billing_period_start.replace(hour=0, minute=0, second=0)
 
-                _LOGGER.debug(f"getting powerpacks for: {current_last_seen_date.strftime("%Y-%m-%d")}")
-                #Determine effective costs, by using the purchased powerpacks
-                try:
-                    powerpacks = list.copy(self._get_powerpacks(current_last_seen_date.strftime("%Y-%m-%d")))
-                    # _LOGGER.debug(f"powerpacks: {powerpacks}")
+                previous_day_cost = 0
+                while day < previous_billing_period_end.replace(hour=23, minute=59, second=59):
+                    day_ts = day.strftime("%Y-%m-%d")
+                    nominal_cost_previous_billing_period_by_day[day_ts] = previous_day_cost + nominal_cost_daily_total.get(day_ts,0)
+                    previous_day_cost += nominal_cost_daily_total.get(day_ts,0)
+                    day += timedelta(days=1)
 
-                    current_amount_paid = 0
-                    total_cost = current_billing_period_cost
-                    current_powerpacks_used = ""
-                    while total_cost > 0 and len(powerpacks) > 0:
-                        powerpack = powerpacks.pop(0)
-                        if datetime.strptime(powerpack["availableFrom"], "%Y-%m-%d")  > datetime.now():
-                            continue
-                        if powerpack['balance'] <= 0:
-                            continue
-                        offset = min(powerpack['balance'], total_cost)
-                        current_powerpacks_used += f"{powerpack["name"]} offsets ${offset:.2f} (ratio: {powerpack["ratio"]:.2f})\n"
-                        _LOGGER.debug(
-                            "Using %s to offset $%.2f of the cost (ratio: %.2f)",
-                            powerpack["name"],
-                            offset,
-                            powerpack["ratio"],
-                        )
-                        total_cost -= offset
-                        current_amount_paid += offset * powerpack["ratio"]
-                    
-                    _LOGGER.debug("Total paid for powerpacks: $%.2f", current_amount_paid)
-                    
-                    if total_cost > 0:
-                        current_amount_paid += total_cost
-                    
-                    total_consumption_cost = 0
-                    current_billing_rates = self._stores["rates"].data.get(current_billing_period_month, {})
-                    for rate in current_billing_rates:
-                        if rate != "daily_charge":
-                            total_consumption_cost += current_billing_period_usage_by_rate[rate] * current_billing_rates[rate]["rate"]
+                #calculate the usage starting from the beginning of the current billing period
+                day = current_billing_period_start.replace(hour=0, minute=0, second=0)
 
-                    current_daily_cost = current_billing_period_usage_by_rate["daily_charge"] * current_billing_rates.get("daily_charge", {}).get("rate", 0)
+                previous_day_cost = 0
+                while day < now:
+                    day_ts = day.strftime("%Y-%m-%d")
+                    nominal_cost_current_billing_period_by_day[day_ts] = previous_day_cost + nominal_cost_daily_total.get(day_ts,0)
+                    previous_day_cost += nominal_cost_daily_total.get(day_ts,0)
+                    day += timedelta(days=1)
 
-                    current_final_ratio = (
-                        (current_amount_paid - current_daily_cost) / total_consumption_cost
-                        if total_consumption_cost
-                        else 1
-                    )
-                    _LOGGER.debug("Final ratio: %.2f", current_final_ratio)
-                except TypeError (e):
-                    _LOGGER.debug(f"Can't use powerpacks data: {e}")
+                #using the daily totals - calculate the daily effective rates
+                effective_cost_ratio_by_day = {}
 
+                day_counter = 1;
+                for day in nominal_cost_previous_billing_period_by_day.keys():
+                    effective_cost_ratio_by_day[day], _, _ = self._calculate_effective_cost(day, day_counter, nominal_cost_previous_billing_period_by_day[day])
+                    day_counter += 1
 
-                _LOGGER.debug(f"getting powerpacks for: {previous_last_seen_date.strftime("%Y-%m-%d")}")
-                #Determine effective costs, by using the purchased powerpacks
-                try:
-                    powerpacks = list.copy(self._get_powerpacks(previous_last_seen_date.strftime("%Y-%m-%d")))
-                    # _LOGGER.debug(f"powerpacks: {powerpacks}")
+                day_counter = 1;
+                for day in nominal_cost_current_billing_period_by_day.keys():
+                    effective_cost_ratio_by_day[day], _, _ = self._calculate_effective_cost(day, day_counter, nominal_cost_current_billing_period_by_day[day])
+                    day_counter += 1
+                
+                #use the previously calculated ratios to adjust the daily historical cost
+                #these timestamps are hourly (unlike the orginal usage ones, which are every 30mins)
+                for ts, value in nominal_cost_sensor_total.items():
+                    timestamp = datetime.fromisoformat(ts)
+                    record_month = timestamp.strftime("%m")
+                    record_day = timestamp.strftime("%Y-%m-%d")
+                    hourly_charge = self._stores["rates"].data.get(record_month, {}).get("daily_charge", {}).get("rate", 0)/24                
+                    effective_cost_sensor_total[timestamp] = (value - hourly_charge) * effective_cost_ratio_by_day.get(record_day, 0) + hourly_charge
 
-                    previous_amount_paid = 0
-                    previous_total_cost = previous_billing_period_cost
-                    while previous_total_cost > 0 and len(powerpacks) > 0:
-                        powerpack = powerpacks.pop(0)
-                        if datetime.strptime(powerpack["availableFrom"], "%Y-%m-%d")  > datetime.now():
-                            continue
-                        if powerpack['balance'] <= 0:
-                            continue
-                        offset = min(powerpack['balance'], previous_total_cost)
-                        _LOGGER.debug(
-                            "Using %s to offset $%.2f of the cost (ratio: %.2f)",
-                            powerpack["name"],
-                            offset,
-                            powerpack["ratio"],
-                        )
-                        previous_total_cost -= offset
-                        previous_amount_paid += offset * powerpack["ratio"]
-                    
-                    _LOGGER.debug("Total paid for powerpacks: $%.2f", previous_amount_paid)
-                    
-                    if previous_total_cost > 0:
-                        previous_amount_paid += previous_total_cost
-                    
-                    previous_total_consumption_cost = 0
-                    previous_billing_rates = self._stores["rates"].data.get(previous_billing_period_month, {})
-                    for rate in previous_billing_rates:
-                        if rate != "daily_charge":
-                            previous_total_consumption_cost += previous_billing_period_usage_by_rate[rate] * previous_billing_rates[rate]["rate"]
+                current_final_ratio, current_amount_paid, current_powerpacks_used = self._calculate_effective_cost(current_last_seen_date.strftime("%Y-%m-%d"), current_billing_period_usage_by_rate["daily_charge"], current_billing_period_cost)
 
-                    previous_daily_cost = previous_billing_period_usage_by_rate["daily_charge"] * previous_billing_rates.get("daily_charge", {}).get("rate", 0)
-
-                    previous_final_ratio = (
-                        (previous_amount_paid - previous_daily_cost) / previous_total_consumption_cost
-                        if previous_total_consumption_cost
-                        else 1
-                    )
-                    _LOGGER.debug("Previous Final ratio: %.2f", previous_final_ratio)
-                except TypeError (e):
-                    _LOGGER.debug(f"Can't use powerpacks data: {e}")
+                previous_final_ratio, previous_amount_paid, _ = self._calculate_effective_cost(previous_last_seen_date.strftime("%Y-%m-%d"), previous_billing_period_usage_by_rate["daily_charge"], previous_billing_period_cost)
 
                 # Store all values, so the sensors can pull them out when needed
                 # this also ensures that when HA starts there's something to return saving on shifts from 'unknown' state
@@ -676,6 +667,7 @@ class PowershopCoordinator(
                     'historical': {
                         'historical_usage_total': usage_sensor_total,
                         'historical_nominal_cost_total': nominal_cost_sensor_total,
+                        'historical_effective_cost_total': effective_cost_sensor_total,
                         **{
                             f"historical_usage_{key}": value for key, value in usage_sensor_by_rate.items()
                         },
@@ -696,7 +688,7 @@ class PowershopCoordinator(
                                     for key, value in previous_billing_period_usage_by_rate.items()},
 
                         **{f"effective_unit_cost_{key}": value.get("rate") * current_final_ratio
-                                    for key, value in current_billing_rates.items() if key != 'daily_charge'},
+                                    for key, value in self._stores["rates"].data.get(current_billing_period_month, {}).items() if key != 'daily_charge'},
                         'effective_cost_ratio': current_final_ratio,
                     },
                     'attributes':{
