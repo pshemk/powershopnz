@@ -1,9 +1,11 @@
 {
   "domain": "powershopnz",
   "name": "Powershop NZ",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "config_flow": true,
-  "documentation": "https://github.com/example/ha-powershopnz",
+  "documentation": "https://github.com/pshemk/powershopnz#readme",
+  "issue_tracker": "https://github.com/pshemk/powershopnz/issues",
+  "codeowners": ["@pshemk"],
   "requirements": [
     "homeassistant-historical-sensor@git+https://github.com/pshemk/ha-historical-sensor.git@aae6a0e1428e83da21dc1a7d9e87354016aebcec"
   ],
