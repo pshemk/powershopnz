@@ -252,7 +252,7 @@ class PowershopCoordinator(
         billing_rates = self._stores["rates"].data.get(datetime.strptime(day, "%Y-%m-%d").strftime("%m"), {})
         daily_cost = billing_period_day * billing_rates.get("daily_charge", {}).get("rate", 0)
 
-        final_ratio = (amount_paid - daily_cost) / (billing_period_cost - daily_cost)
+        final_ratio = (amount_paid - daily_cost) / (billing_period_cost - daily_cost) if billing_period_cost - daily_cost != 0 else 1
         
         # _LOGGER.debug(f"day {day} paid: {amount_paid} cost: {billing_period_cost:.2f}, dc: {daily_cost:.2f}, r: {final_ratio}")
         return final_ratio, amount_paid, powerpacks_used
