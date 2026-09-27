@@ -481,7 +481,7 @@ class PowershopHistoricalSensor(CoordinatorEntity[PowershopCoordinator], Histori
             partial_sum = sum([x.state for x in collection])
             accumulated = accumulated + partial_sum
 
-            dt = datetime.fromtimestamp(block_ts).replace(tzinfo=ZoneInfo("UTC"))
+            dt = datetime.fromtimestamp(block_ts).replace(tzinfo=ZoneInfo("Pacific/Auckland"))
 
             ret.append(
                 StatisticData(
