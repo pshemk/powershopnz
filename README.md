@@ -232,6 +232,10 @@ grid_options:
 ### v1.0.0 (2026-09-27)
 - First release
 
+### v1.0.2 and v1.0.3 (2026-09-28)
+- Fix of an initial crash when starting fresh
+- Fix to timezone skew for long term statistics when running on HAOS
+
 ## Acknowledgements 
 
 This integration uses the [Historical sensor](https://github.com/ldotlopez/ha-historical-sensor) by Luis López. 
