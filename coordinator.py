@@ -190,6 +190,15 @@ class PowershopCoordinator(
         )
 
     def _get_powerpacks(self, day: str) -> list[dict[str, Any]]:
+        # _LOGGER.debug(f"getting powerpacks for {day}")
+        max_counter = 10
+        while max_counter > 0:
+            if not self._stores["powerpacks"].data.get(day):
+                day = (datetime.strptime(day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+                max_counter -= 1
+            else:
+                break
+
         if self._stores["powerpacks"].data.get(day, {}).get("type", "") == "list":
             _LOGGER.debug("getting a list %s", day )
             return self._stores["powerpacks"].data.get(day, {}).get("powerpacks", [])
@@ -227,6 +236,8 @@ class PowershopCoordinator(
             refresh_powerpacks = False
             refresh_rates = False
 
+            available_powerpacks = ""
+            future_powerpacks = ""
 
             now = dt_util.now()
             today = now.strftime("%Y-%m-%d")
@@ -322,9 +333,7 @@ class PowershopCoordinator(
 
                     #force reprocessing of the billing data
                     await self._schedule_usage_process()
-                
-
-                    
+                                    
                 # Store refresh_token if needed
                 if self._api_client.refresh_token != self._config_entry.data.get(CONF_REFRESH_TOKEN):
                     _LOGGER.debug("Updating refresh token")
@@ -339,13 +348,19 @@ class PowershopCoordinator(
                 #store call time
                 self._last_api_call = now
             
+            #get the lists of current and future powerpacks, so they can get returned as attributes
+            for powerpack in self._get_powerpacks(today):
+                if datetime.strptime(powerpack["availableFrom"], "%Y-%m-%d")  > datetime.now():
+                    future_powerpacks += f"{powerpack["name"]} ratio: {powerpack["ratio"]:.2f} balance: {powerpack["balance"]} available: {powerpack["availableFrom"]}\n"
+                else:
+                    available_powerpacks += f"{powerpack["name"]} ratio: {powerpack["ratio"]:.2f} balance: {powerpack["balance"]}\n"
 
             #identify the current rate from the rate schedule and return it
             timeslot = self._stores["rates_schedule"].data[now.weekday()][now.hour * 2 + now.minute // 30]
             current_rate = self._stores["rates"].data.get(month).get(timeslot).get("rate")
             effective_current_rate = current_rate * self._stores["sensors"].data.get("regular", {}).get("effective_cost_ratio", 1)
 
-            #return all the sensors calculates above and read from the sensors store
+            #return all the sensors calculated above and read from the sensors store
             #return attributes as well
             return { 
                 **{
@@ -360,7 +375,9 @@ class PowershopCoordinator(
                 **self._stores["sensors"].data.get("regular", {}),
                 **{
                     f"attributes_{key}": value for key, value in self._stores["sensors"].data.get("attributes", {}).items()
-                }
+                },
+                "attributes_powerpacks_available_balance": { "powerpacks": available_powerpacks },
+                "attributes_powerpacks_future_balance": { "powerpacks": future_powerpacks },
             }
         except Exception:
             _LOGGER.exception(
@@ -406,10 +423,10 @@ class PowershopCoordinator(
                     if usage["last_usage_date"] != self._stores["state"].data.get("last_usage_date"):
                         await self._schedule_usage_process()
 
-                    await self._stores["state"].async_save({
-                        **self._stores["state"].data,
-                        "last_usage_date": usage["last_usage_date"]
-                    })
+                        await self._stores["state"].async_save({
+                            **self._stores["state"].data,
+                            "last_usage_date": usage["last_usage_date"]
+                        })
             _LOGGER.debug("Usage synchronised")
 
         except asyncio.CancelledError:
@@ -423,8 +440,6 @@ class PowershopCoordinator(
         """Process usage data in the background."""
 
         try:
-            # _LOGGER.debug("Starting usage processing")
-
             _LOGGER.debug("Data to process")
             _LOGGER.debug(
                 "Latest usage: %s, processed up to: %s",
@@ -468,7 +483,7 @@ class PowershopCoordinator(
                 }
                 previous_billing_period_usage_by_rate.setdefault("daily_charge", 0)
 
-                #Usage - stores per 1h consumption, the timeslot is the 30min in the middle of the hour
+                #Usage - stored per 1h consumption, the timeslot is the 30min in the middle of the hour
                 #we fetch 30mins intervals, so two have to be summed up
                 #also calulcate the sum for current billing period
                 usage_sensor_total = {}
@@ -575,7 +590,7 @@ class PowershopCoordinator(
                         if powerpack['balance'] <= 0:
                             continue
                         offset = min(powerpack['balance'], total_cost)
-                        current_powerpacks_used += f"Using {powerpack["name"]} to offset ${offset:.2f} of the cost (ratio: {powerpack["ratio"]:.2f})\n"
+                        current_powerpacks_used += f"{powerpack["name"]} offsets ${offset:.2f} (ratio: {powerpack["ratio"]:.2f})\n"
                         _LOGGER.debug(
                             "Using %s to offset $%.2f of the cost (ratio: %.2f)",
                             powerpack["name"],
@@ -654,7 +669,8 @@ class PowershopCoordinator(
                 except TypeError (e):
                     _LOGGER.debug(f"Can't use powerpacks data: {e}")
 
-                # Store all values, so the sensors get pull them out when needed
+                # Store all values, so the sensors can pull them out when needed
+                # this also ensures that when HA starts there's something to return saving on shifts from 'unknown' state
                 await self._stores["sensors"].async_save({
                     **self._stores["sensors"].data,
                     'historical': {
