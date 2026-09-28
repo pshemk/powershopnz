@@ -49,7 +49,6 @@ STORE_NAMES = (
     "usage",
     "billing_dates",
     "sensors",
-    "sensors_pointers"
 )
 
 class PowershopCoordinator(
@@ -89,9 +88,11 @@ class PowershopCoordinator(
 
         self._usage_fetch_task: asyncio.Task | None = None
         self._usage_process_task: asyncio.Task | None = None
+        self._data_expiry_task: asyncio.Task | None = None
 
         self._cancel_usage_fetch_schedule = None
         self._cancel_usage_process_schedule = None
+        self._cancel_data_expiry_task = None
 
         self._api_client = PowershopApiClient(
             self.refresh_token,
@@ -114,18 +115,32 @@ class PowershopCoordinator(
             self._schedule_usage_fetch,
         )        
 
-        #run first isage processing here, once HA is up
+        #run first usage processing here, once HA is up
         async_at_started(
             self.hass,
             self._schedule_usage_process,
         )        
 
+        #run data expiry, once HA is up
+        async_at_started(
+            self.hass,
+            self._schedule_data_expiry,
+        )        
+        #schedule periodic data expiry
+        self._cancel_data_expiry_task = async_track_time_interval(
+            self.hass,
+            self._schedule_data_expiry,
+            timedelta(hours=6)
+        )
+
         if self._config_entry.options.get(CONF_REPROCESS_DATA):
             _LOGGER.debug("Will force-reprocess current billing period")
-            await self._stores["state"].async_save({
-                **self._stores["state"].data,
-                "last_usage_date": None
-            })
+            # await self._stores["state"].async_save({
+            #     **self._stores["state"].data,
+            #     "last_usage_date": None
+            # })
+            await self._stores["state"].async_save({})
+
             self.hass.config_entries.async_update_entry(
                 self._config_entry,
                 options={
@@ -158,6 +173,17 @@ class PowershopCoordinator(
             self._async_process_usage()
         )
 
+    async def _schedule_data_expiry(self, *args) -> None:
+        """Start a data expiry task when none is already running."""
+
+        if  self._data_expiry_task is not None and not self._data_expiry_task.done():
+            _LOGGER.debug("Data expiry is already running")
+            return
+
+        self._data_expiry_task = self.hass.async_create_task(
+            self._expire_old_data()
+        )
+
     async def async_shutdown(self) -> None:
         """Cancel background work, remove schedules, and close the API client."""
 
@@ -167,10 +193,14 @@ class PowershopCoordinator(
         if self._cancel_usage_process_schedule:
             self._cancel_usage_process_schedule()
             self._cancel_usage_process_schedule = None
+        if self._cancel_data_expiry_task:
+            self._cancel_data_expiry_task()
+            self._cancel_data_expiry_task = None
+
 
         tasks = [
             task
-            for task in (self._usage_fetch_task, self._usage_process_task)
+            for task in (self._usage_fetch_task, self._usage_process_task, self._data_expiry_task)
             if task is not None and not task.done()
         ]
         for task in tasks:
@@ -223,7 +253,7 @@ class PowershopCoordinator(
         if isinstance(in_timestamp, (int, float)):
             return datetime.fromtimestamp(in_timestamp, dt_util.get_time_zone("Pacific/Auckland"))
         
-        _LOGGER.debug("Can't convert date of type %s", type(in_timestamp))
+        _LOGGER.debug("Can't convert date of type %s, returning epoch", type(in_timestamp))
         return datetime.fromtimestamp(0, dt_util.get_time_zone("Pacific/Auckland"))
  
     def _calculate_effective_cost(self, day: str, billing_period_day: int,  billing_period_cost: float) -> dict[str, Any]: 
@@ -405,7 +435,7 @@ class PowershopCoordinator(
                 "effective_unit_cost": effective_current_rate,
                 **self._stores["sensors"].data.get("regular", {}),
                 **{
-                    f"attributes_{key}": value for key, value in self._stores["sensors"].data.get("attributes", {}).items()
+                    f"attributes_{key}": value for key, value in (self._stores["sensors"].data.get("attributes") or {}).items()
                 },
                 "attributes_powerpacks_available_balance": { "powerpacks": available_powerpacks },
                 "attributes_powerpacks_future_balance": { "powerpacks": future_powerpacks },
@@ -729,19 +759,53 @@ class PowershopCoordinator(
         #check if we have data for this historical sensor
         if historical_data:
 
-            start_timestamp = datetime.fromisoformat(self._stores["state"].data.get(f"last_timestamp_{type}", datetime.combine(date(1970,1,1), time.min, tzinfo=dt_util.get_time_zone("Pacific/Auckland")).isoformat()))
+            start_timestamp = self._any_to_timestamp(self._stores["state"].data.get(f"last_timestamp_{type}"))
 
             for timestamp, value in historical_data.items():
-
-                ts = datetime.fromisoformat(timestamp)
+                ts = self._any_to_timestamp(timestamp)
                 if ts >= start_timestamp:
                     historical_data_filtered[float(ts.timestamp())] = value
                     last_timestamp = ts
             
-            await self._stores["state"].async_save({
-                **self._stores["state"].data,
-                f"last_timestamp_{type}": last_timestamp.isoformat()
+                    await self._stores["state"].async_save({
+                        **self._stores["state"].data,
+                        f"last_timestamp_{type}": last_timestamp.isoformat()
+                    })
+
+        return historical_data_filtered
+
+    async def _expire_old_data(self) -> None:
+        """ Expire data in stores that's older than 62 days """
+
+        _LOGGER.debug("starting data expiry")
+        now = dt_util.now()
+        today = now.strftime("%Y-%m-%d")
+        expiry_date = now - timedelta(days=62) #two months, always covers two billing periods
+
+        if self._stores["state"].data.get("last_expiry") != today:
+
+            #Usage
+            usage = {
+                key: value for key, value in self._stores["usage"].data.items() if self._any_to_timestamp(key) >= expiry_date
+            }
+
+            await self._stores["usage"].async_save(usage)
+
+            #Historical sensors data
+            historical_sensors = {}
+            for historical_sensor, sensor_data in self._stores["sensors"].data.get("historical", {}).items():
+                historical_sensors[historical_sensor] = {
+                    key: value for key, value in sensor_data.items() if self._any_to_timestamp(key) >= expiry_date
+                }
+
+            await self._stores["sensors"].async_save({
+                "historical": historical_sensors,
+                "regular": self._stores["sensors"].data.get("regular", {}),
+                "attributes": self._stores["sensors"].data.get("attributes", {})
             })
 
-        # await self._stores["usage"].async_save({})
-        return historical_data_filtered
+            await self._stores["state"].async_save({
+                **self._stores["state"].data,
+                "last_expiry": today,
+            })
+        _LOGGER.debug("data expiry done")            
