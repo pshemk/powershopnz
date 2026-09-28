@@ -116,6 +116,7 @@ The way power prices are structured varies widely across the country. The types 
 1. Switching between rates (peak/off-peak) doesn't happen at exact times. The integration updates the sensor with the current rate type every 30 seconds. 
 2. Historical data that's loaded into statistics (like past power usage or past cost) can not be updated once stored. Since Powershop doesn't always release past usage information in a chronological order newer data always blocks older data from being stored, that leads to gaps in the statistics. So far I have not found a user-friendly workaround. Deleting the integration does not delete the statistics from Home Assistant either. The only way to delete them right now is to delete them from the database directly. 
 3. The accuracy of past information is not great initially. That's because a lot of historical information (like past rates or already consumed powerpacks) are not accessible via the API. This integration stores all the information as the time progresses and after two full billing cycles the past usage and pricing will be accurate. 
+4. If the long-term statistics appear skewed and don't align with the dates - check the timezone settings of the underlying system/container. This is not an issue in HAOS. 
 
 ## Examples 
 
@@ -234,12 +235,18 @@ grid_options:
 
 ## Releases
 
-### v1.0.0 (2026-09-27)
-- First release
+### v1.0.4 (2026-09-29)
+- Expire old data
+- Make re-auth flow functional
+- Fix powerpacks storing and processing logic
 
 ### v1.0.2 and v1.0.3 (2026-09-28)
 - Fix of an initial crash when starting fresh
 - Fix to timezone skew for long term statistics when running on HAOS
+
+### v1.0.0 (2026-09-27)
+- First release
+
 
 ## Acknowledgements 
 

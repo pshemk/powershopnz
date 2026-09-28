@@ -3,5 +3,5 @@
   "country": [ "NZ" ],
   "content_in_root": true,
   "homeassistant": "2026.09.0",
-  "render_readme": false
+  "render_readme": true
 }
