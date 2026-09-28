@@ -9,6 +9,10 @@ A Home Assistant custom integration that pulls data from your Powershop New Zeal
 
 This is not an official integration provided by Powershop NZ. It simply uses their API to extract the data. 
 
+## Requirements
+
+Your account must be accessible via the new Powershop (Powershop Labs) app.
+
 ## Features
 
 ### Current price sensors
