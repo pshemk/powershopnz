@@ -35,6 +35,24 @@
           "historical_cost": "Past cost statistics",
           "powerpacks": "Powerpacks balances"
         }
+      },
+      "reauth_confirm": {
+        "title": "Powershop NZ re-authentication required",
+        "description": "Click submit to re-trigger authentication process",
+        "data": {}
+      },
+      "reauth_otp": {
+        "title": "Verification code",
+        "description": "Check your email for the verification code received from Powershop, paste it below",
+        "data": {
+          "otp": "Verification code"
+        }
+      }
+    },
+    "abort": {
+      "reauth_successful": {
+        "title": "Powershop NZ account reconnected",
+        "description": "Your Powershop NZ account has been successfully re-authenticated and is ready to use."
       }
     }
   },
@@ -56,5 +74,5 @@
             }
         }
     }
-  }
+  }  
 }

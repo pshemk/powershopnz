@@ -9,8 +9,10 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
+    UpdateFailed
 )
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
@@ -22,7 +24,10 @@ from homeassistant.const import (
     CONF_SCAN_INTERVAL,
 )
 
-from .api import PowershopApiClient
+from .api import (
+    PowershopApiClient,
+    RefreshTokenInvalidError
+)
 from .store import PowershopStore
 
 from .const import (
@@ -440,6 +445,14 @@ class PowershopCoordinator(
                 "attributes_powerpacks_available_balance": { "powerpacks": available_powerpacks },
                 "attributes_powerpacks_future_balance": { "powerpacks": future_powerpacks },
             }
+        except RefreshTokenInvalidError as err:
+            raise ConfigEntryAuthFailed(
+                "PowerShop authentication has expired"
+            ) from err
+        except AuthError as err:
+            raise UpdateFailed(
+                f"Authentication error: {err}"
+            ) from err 
         except Exception:
             _LOGGER.exception(
                 "Powershop coordinator UPDATE FAILED: %s",

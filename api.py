@@ -293,6 +293,9 @@ QUERY_USAGE = """
 class AuthError(Exception):
     """Raised when authentication fails (email not found, token expired, etc.)."""
 
+class RefreshTokenInvalidError(AuthError):
+    """Refresh token is invalid or has been revoked."""    
+
 class OTPError(Exception):
     """Raised when OTP verification fails."""
 
@@ -353,13 +356,30 @@ class PowershopApiClient:
         session = await self._connect()
         
         async with session.post(
-            f"{FIREBASE_REFRESH_URL}?key={FIREBASE_API_KEY}",
-            data=f"grant_type=refresh_token&refresh_token={self.refresh_token}",
-            headers={"content-type": "application/x-www-form-urlencoded"},
-        ) as resp:
+                f"{FIREBASE_REFRESH_URL}?key={FIREBASE_API_KEY}",
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": self.refresh_token,
+                },
+                headers={
+                    "content-type": "application/x-www-form-urlencoded",
+                },        
+            ) as resp:
             data = await resp.json()
             if not resp.ok:
+                error = data.get("error", {})
+                error_code = error.get("message")
+
+                if error_code in (
+                    "TOKEN_EXPIRED",
+                    "INVALID_REFRESH_TOKEN",
+                ):
+                    raise RefreshTokenInvalidError(
+                        f"Refresh token rejected: {data}"
+                    )
+
                 raise AuthError(f"Token refresh failed: {data}")
+                
             self._id_token = data["id_token"]
             self.refresh_token = data["refresh_token"]
             expires_in = int(data.get("expires_in", 3600))

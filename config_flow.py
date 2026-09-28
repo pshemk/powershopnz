@@ -238,18 +238,14 @@ class PowershopConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if self._email is None or self._journey_id is None:
                     raise AuthError("OTP flow state is missing")
                 tokens = await self._client.verify_otp(self._email, otp, self._journey_id)
-                entry = self.hass.config_entries.async_get_entry(
-                    self.context["entry_id"]
-                )
-                self.hass.config_entries.async_update_entry(
-                    entry,
-                    data={
-                        **entry.data,
+
+                return self.async_update_reload_and_abort(
+                    self._get_reauth_entry(),
+                    data_updates={
                         CONF_REFRESH_TOKEN: tokens["refresh_token"],
                     },
+                    reason="reauth_successful",
                 )
-                await self.hass.config_entries.async_reload(entry.entry_id)
-                return self.async_abort(reason="reauth_successful")
             except OTPError:
                 errors["base"] = "invalid_otp"
             except Exception:
