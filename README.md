@@ -45,6 +45,7 @@ This integration can be installed using HACS custom integration:
 8. Search for "Powershop NZ" in the window that appears and click it
 9. Follow the prompts of the installation process
 
+The icon currently doesn't work in HACS, due to a bug in HACS. 
 
 ## Sensors
 
