@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import logging
-from typing import Any
+from typing import Any, TypedDict
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -22,6 +22,78 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 TIMEZONE = ZoneInfo("Pacific/Auckland")
+
+
+class TokenResult(TypedDict):
+    """Authentication token response."""
+
+    id_token: str
+    refresh_token: str
+
+
+class MeterPoint(TypedDict):
+    """Meter point belonging to a property."""
+
+    id: str
+    market_identifier: str
+
+
+class PropertyInfo(TypedDict):
+    """Property returned by the API."""
+
+    property_id: str
+    account_id: str
+    address: str
+    meter_points: list[MeterPoint]
+
+
+class RateInfo(TypedDict):
+    """Rate returned by the API."""
+
+    name: str
+    type: str | None
+    rate: float
+
+
+class RateType(TypedDict):
+    """Time-of-use rate type returned by the API."""
+
+    name: str
+    bucket: str
+    rate: float
+
+
+class Powerpack(TypedDict):
+    """Powerpack returned by the API."""
+
+    id: str
+    name: str
+    availableFrom: str
+    purchasedAt: str
+    purchaseCost: float
+    ratio: float
+    balance: float
+
+
+class UsageResult(TypedDict):
+    """Usage data and the latest billing date."""
+
+    usage: dict[str, float]
+    last_usage_date: str | None
+
+
+class BillingDateSection(TypedDict):
+    """Billing dates in datetime and string form."""
+
+    datetime: dict[str, datetime]
+    string: dict[str, str]
+
+
+class BillingDates(TypedDict):
+    """Current and previous billing dates."""
+
+    current: BillingDateSection
+    previous: BillingDateSection
 
 QUERY_ACCOUNTS = """
     fragment AccountBalanceFragment on AccountType {
@@ -79,39 +151,6 @@ query Account($accountNumber: String!) {
 }
 
 """
-QUERY_RATES_SIMPLE =  """
-    fragment AgreementFields on Agreement {
-        displayName
-        description
-        validFrom
-        validTo
-        rates {
-            label
-            displayLabel
-            hasDiscount
-            formattedRateExcludingTax
-            formattedRateIncludingTax
-        }
-    }
-
-    query Agreements($accountNumber: String!, $propertyId: ID!) {
-        account(accountNumber: $accountNumber) {
-            id
-            property(id: $propertyId) {
-                id
-                address
-                meterPoints {
-                    id
-                    marketIdentifier
-                    activeAgreement {
-                        ...AgreementFields
-                }
-            }
-        }
-    }
-}        
-"""
-
 QUERY_POWERPACK_BALANCES = """
 query VouchersBalanceDetail($accountNumber: ID!) {
     vouchersBalanceDetail(accountNumber: $accountNumber) {
@@ -307,9 +346,9 @@ class PowershopApiClient:
         refresh_token: str | None = None,
         session: aiohttp.ClientSession | None = None,
     ) -> None:
-        self._session = session
-        self._owns_session = session is None
-        self.refresh_token = refresh_token
+        self._session: aiohttp.ClientSession | None = session
+        self._owns_session: bool = session is None
+        self.refresh_token: str | None = refresh_token
         self._id_token: str | None = None
         self._id_token_expiry: datetime | None = None
 
@@ -317,6 +356,7 @@ class PowershopApiClient:
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=30)
             self._session = aiohttp.ClientSession(timeout=timeout)
+            self._owns_session = True
         return self._session
 
     async def disconnect(self) -> None:
@@ -329,14 +369,14 @@ class PowershopApiClient:
         hour, minute, _ = map(int, value.split(":"))
         return hour * 2 + minute // 30
 
-    async def _get_tokens_from_custom_token(self, custom_token: str) -> dict[str, str]:
+    async def _get_tokens_from_custom_token(self, custom_token: str) -> TokenResult:
 
-        session = await self._connect()
+        session: aiohttp.ClientSession = await self._connect()
         async with session.post(
             f"{FIREBASE_SIGN_IN_URL}?key={FIREBASE_API_KEY}",
             json={"token": custom_token, "returnSecureToken": True},
         ) as resp:
-            data = await resp.json()
+            data: dict[str, Any] = await resp.json()
             if not resp.ok:
                 raise AuthError(f"Can't get new id token: {data}")
             id_token = data["idToken"]
@@ -353,7 +393,7 @@ class PowershopApiClient:
         if not self.refresh_token:
             raise AuthError("No refresh token")
         
-        session = await self._connect()
+        session: aiohttp.ClientSession = await self._connect()
         
         async with session.post(
                 f"{FIREBASE_REFRESH_URL}?key={FIREBASE_API_KEY}",
@@ -365,10 +405,10 @@ class PowershopApiClient:
                     "content-type": "application/x-www-form-urlencoded",
                 },        
             ) as resp:
-            data = await resp.json()
+            data: dict[str, Any] = await resp.json()
             if not resp.ok:
-                error = data.get("error", {})
-                error_code = error.get("message")
+                error: dict[str, Any] = data.get("error", {})
+                error_code: str | None = error.get("message")
 
                 if error_code in (
                     "TOKEN_EXPIRED",
@@ -401,8 +441,8 @@ class PowershopApiClient:
     async def send_otp(self, email: str) -> str:
 
         journey_id = str(uuid.uuid4())
-        session = await self._connect()
-        payload = {
+        session: aiohttp.ClientSession = await self._connect()
+        payload: dict[str, str | bool] = {
             "email": email,
             "brand": "powershop",
             "redirectUrl": "https://app.powershop.nz",
@@ -420,11 +460,11 @@ class PowershopApiClient:
                 raise AuthError(f"Failed to send OTP: HTTP {resp.status}")
         return journey_id
 
-    async def verify_otp(self, email: str, otp: str, journey_id: str) -> dict[str, str]:
+    async def verify_otp(self, email: str, otp: str, journey_id: str) -> TokenResult:
 
         _LOGGER.debug("verify otp start")
-        session = await self._connect()
-        payload = {
+        session: aiohttp.ClientSession = await self._connect()
+        payload: dict[str, str] = {
             "email": email,
             "otp": otp,
             "brand": "powershop",
@@ -435,11 +475,11 @@ class PowershopApiClient:
             json=payload,
             headers={"content-type": "application/json", "X-Client-Platform": "web"},
         ) as resp:
-            data = await resp.json()
+            data: dict[str, Any] = await resp.json()
             if not resp.ok:
                 _LOGGER.debug("OTP Failed")
                 raise OTPError(data.get("error", "OTP verification failed"))
-            custom_token = data.get("customToken")
+            custom_token: str | None = data.get("customToken")
             if not custom_token:
                 _LOGGER.debug("no OTP token returned")
                 raise OTPError("No custom token returned by OTP validator")
@@ -452,7 +492,7 @@ class PowershopApiClient:
         if timestamp is None:
             return None
 
-        dt = datetime.fromisoformat(timestamp)
+        dt: datetime = datetime.fromisoformat(timestamp)
 
         if dt.time() == datetime.min.time():
             start = dt
@@ -469,8 +509,8 @@ class PowershopApiClient:
         self, query: str, variables: dict[str, Any] | None = None
     ) -> dict[str, Any]:
 
-        id_token = await self._get_current_token()
-        session = await self._connect()
+        id_token: str = await self._get_current_token()
+        session: aiohttp.ClientSession = await self._connect()
         payload: dict[str, Any] = {"query": query}
         if variables:
             payload["variables"] = variables
@@ -483,11 +523,11 @@ class PowershopApiClient:
                 "content-type": "application/json",
             },
         ) as resp:
-            body = await resp.text()
+            body: str = await resp.text()
             if not resp.ok:
                 _LOGGER.error(f"GraphQL {resp.status}:  {body}" )
                 raise ValueError(f"GraphQL HTTP {resp.status}: {body[:500]}")
-            data = await resp.json(content_type=None)
+            data: dict[str, Any] = await resp.json(content_type=None)
         if "errors" in data:
             _LOGGER.warning("GraphQL errors: %s", data["errors"])
             raise ValueError(data["errors"][0].get("message", "GraphQL error"))
@@ -495,38 +535,44 @@ class PowershopApiClient:
         return data.get("data", {})
 
 
-    async def get_properties(self) -> list[dict[str, Any]]:
-        accounts = await self._run_query(
+    async def get_properties(self) -> list[PropertyInfo]:
+        accounts: dict[str, Any] = await self._run_query(
             QUERY_ACCOUNTS
         )
-        properties = []
-        for account in accounts.get("viewer").get("accounts"):
+        properties: list[dict[str, Any]] = []
+        viewer = accounts.get("viewer") or {}
+        for account in viewer.get("accounts") or []:
             _LOGGER.debug(f"account: {account}")
-            for property in account.get("properties", []):
-                _LOGGER.debug(f"property: {property}")
-                meter_points = []
-                for meter_point in property.get("meterPoints", []):
+            for property_data in account.get("properties") or []:
+                _LOGGER.debug("property: %s", property_data)
+                meter_points: list[dict[str, str]] = []
+                for meter_point in property_data.get("meterPoints") or []:
                     meter_points.append({"id": meter_point["id"], "market_identifier": meter_point["marketIdentifier"]})
                 properties.append({
-                    "property_id": property["id"],
+                    "property_id": property_data["id"],
                     "account_id": account.get("number"),
-                    "address": " ".join(property["address"].lower().title().splitlines()),
+                    "address": " ".join(property_data["address"].lower().title().splitlines()),
                     "meter_points": meter_points 
                 })
         _LOGGER.debug(f"got list of properties: {properties}")
         return properties
 
 
-    async def get_rate_types(self, account_id: str, property_id: str) -> dict[str, Any]:
-        rates_data =  await self._run_query(
+    async def get_rate_types(
+        self, account_id: str, property_id: str
+    ) -> dict[str, RateType]:
+        rates_data: dict[str, Any] = await self._run_query(
             QUERY_RATES, {"accountNumber": account_id, "propertyId": property_id}
         )
-        rate_types = {}
-        meter_points = rates_data.get("account", {}).get("property", {}).get("meterPoints", {})
+        rate_types: dict[str, RateType] = {}
+        account = rates_data.get("account") or {}
+        property_data = account.get("property") or {}
+        meter_points = property_data.get("meterPoints") or []
         if not meter_points or len(meter_points) == 0: 
             _LOGGER.warning("Can not find any meters")
             return {}
-        rates = meter_points[0].get("activeAgreement", {}).get("rates", {})
+        active_agreement = meter_points[0].get("activeAgreement") or {}
+        rates = active_agreement.get("rates") or []
         if not rates or len(rates) == 0:
             _LOGGER.warning("Can not find any rates")
             return {}
@@ -553,16 +599,21 @@ class PowershopApiClient:
             }
         return rate_types
 
-    async def get_rates(self, account_id: str, property_id: str) -> dict[str, Any]:
-        rates_data =  await self._run_query(
+    async def get_rates(
+        self, account_id: str, property_id: str
+    ) -> dict[str, RateInfo]:
+        rates_data: dict[str, Any] = await self._run_query(
             QUERY_RATES, {"accountNumber": account_id, "propertyId": property_id}
         )
-        final_rates = {}
-        meter_points = rates_data.get("account", {}).get("property", {}).get("meterPoints", {})
+        final_rates: dict[str, RateInfo] = {}
+        account = rates_data.get("account") or {}
+        property_data = account.get("property") or {}
+        meter_points = property_data.get("meterPoints") or []
         if not meter_points or len(meter_points) == 0: 
             _LOGGER.warning("Can not find any meters")
             return {}
-        rates = meter_points[0].get("activeAgreement", {}).get("rates", {})
+        active_agreement = meter_points[0].get("activeAgreement") or {}
+        rates = active_agreement.get("rates") or []
         if not rates or len(rates) == 0:
             _LOGGER.warning("Can not find any rates")
             return {}
@@ -576,7 +627,7 @@ class PowershopApiClient:
 
 
     async def get_powerpacks_balances(self, account_id: str) -> dict[str, Any]:
-        balances_data = await self._run_query(
+        balances_data: dict[str, Any] = await self._run_query(
             QUERY_POWERPACK_BALANCES, {"accountNumber": account_id}
         )        
         return {
@@ -584,15 +635,16 @@ class PowershopApiClient:
             "powerpacks_future_balance": balances_data["vouchersBalanceDetail"]["redeemableInFuture"]/100,
             }
 
-    async def get_powerpacks(self, account_id: str) -> list[dict[str, Any]]:
+    async def get_powerpacks(self, account_id: str) -> list[Powerpack]:
 
-        cursor = None
-        powerpacks_data = []
+        cursor: str | None = None
+        powerpacks_data: list[Powerpack] = []
         while True:
-            powerpacks_data_raw = await self._run_query(
+            powerpacks_data_raw: dict[str, Any] = await self._run_query(
                 QUERY_POWERPACKS, {"accountNumber": account_id, "after": cursor }
             )
-            edges = powerpacks_data_raw.get("vouchersForAccount", {}).get("edges", {})
+            vouchers = powerpacks_data_raw.get("vouchersForAccount") or {}
+            edges: list[dict[str, Any]] = vouchers.get("edges") or []
             if not edges or len(edges) == 0:
                 break
             for node in edges:
@@ -607,12 +659,10 @@ class PowershopApiClient:
                         "balance": float(node["node"]["balance"])/100,
                     }
                 )
-            page_info = powerpacks_data_raw.get("vouchersForAccount", {}).get(
-                "pageInfo", {}
-            )
+            page_info: dict[str, Any] = vouchers.get("pageInfo") or {}
             if not page_info.get("hasNextPage"):
                 break
-            next_cursor = page_info.get("endCursor")
+            next_cursor: str | None = page_info.get("endCursor")
             if not next_cursor or next_cursor == cursor:
                 raise ValueError("Powerpacks pagination returned an invalid cursor")
             cursor = next_cursor
@@ -625,44 +675,47 @@ class PowershopApiClient:
         self, account_id: str, property_id: str
     ) -> list[list[str | None]]:
 
-        rate_types = await self.get_rate_types(account_id, property_id)
-        buckets = {}
+        rate_types: dict[str, Any] = await self.get_rate_types(account_id, property_id)
+        buckets: dict[str, str] = {}
 
         for rate_name, rate_type in rate_types.items():
             buckets[rate_type["bucket"]] = rate_name
         # _LOGGER.debug(f"buckets: {buckets}")    
         
-        rates_data =  await self._run_query(
+        rates_data: dict[str, Any] = await self._run_query(
             QUERY_RATES, {"accountNumber": account_id, "propertyId": property_id}
         )
-        meter_points = rates_data.get("account", {}).get("property", {}).get("meterPoints", {})
+        account = rates_data.get("account") or {}
+        property_data = account.get("property") or {}
+        meter_points = property_data.get("meterPoints") or []
         if not meter_points or len(meter_points) == 0: 
             _LOGGER.debug("no meter_points")
             return []
-        tous = meter_points[0].get("activeAgreement", {}).get("timeOfUseSchemes", {})
+        active_agreement = meter_points[0].get("activeAgreement") or {}
+        tous = active_agreement.get("timeOfUseSchemes") or []
         if not tous or len(tous) == 0:
             _LOGGER.debug("no tous")
             return []
-        timeslots = tous[0].get("timeslots", [])
+        timeslots = tous[0].get("timeslots") or []
         # _LOGGER.debug(f"timeslots: {timeslots}")
         if not timeslots or len(timeslots) == 0:
             return []
         
-        rates_schedule = [[None] * 48 for _ in range(7)]
+        rates_schedule: list[list[str | None]] = [[None] * 48 for _ in range(7)]
 
         for slot in timeslots:
             start = self._time_to_slot(slot["activeFrom"])
             end = self._time_to_slot(slot["activeTo"])
 
             if start == end:
-                slots = range(48)
+                slots: range | list[int] = range(48)
             elif start < end:
                 slots = range(start, end)
             else:
                 slots = list(range(start, 48)) + list(range(end))
 
             if slot["weekdays"]:
-                weekdays = range(5)
+                weekdays: range | list[int] = range(5)
             elif slot["saturdays"]:
                 weekdays = [5]
             elif slot["sundays"]:
@@ -685,52 +738,74 @@ class PowershopApiClient:
         return rates_schedule
 
     async def get_usage(
-        self, account_id: str, property_id: str, startOn: str | None = None
-    ) -> dict[str, Any]:
+        self, account_id: str, property_id: str, start_on: str | None = None
+    ) -> UsageResult:
 
-        cursor = None
-        usage_data = {}
-        last_timestamp = None
+        cursor: str | None = None
+        usage_data: dict[str, float] = {}
+        last_timestamp: str | None = None
 
         while True:
-            usage_data_raw = await self._run_query(
-                QUERY_USAGE, {"accountNumber": account_id, "propertyId": property_id, "after": cursor, "startOn": startOn }
+            usage_data_raw: dict[str, Any] = await self._run_query(
+                QUERY_USAGE,
+                {
+                    "accountNumber": account_id,
+                    "propertyId": property_id,
+                    "after": cursor,
+                    "startOn": start_on,
+                },
             )
-            edges = usage_data_raw.get("account", {}).get("property", {}).get("measurements", {}).get("edges", {})
+            account = usage_data_raw.get("account") or {}
+            property_data = account.get("property") or {}
+            measurements = property_data.get("measurements") or {}
+            edges: list[dict[str, Any]] = measurements.get("edges") or []
             if not edges or len(edges) == 0:
                 break
             for node in edges:
                 usage_data[node["node"]["startAt"]] = float(node["node"]["value"])
                 last_timestamp = node["node"]["endAt"]
-            page_info = usage_data_raw.get("account", {}).get("property", {}).get(
-                "measurements", {}
-            ).get("pageInfo", {})
+            page_info: dict[str, Any] = measurements.get("pageInfo") or {}
             if not page_info.get("hasNextPage"):
                 break
-            next_cursor = page_info.get("endCursor")
+            next_cursor: str | None = page_info.get("endCursor")
             if not next_cursor or next_cursor == cursor:
                 raise ValueError("Usage pagination returned an invalid cursor")
             cursor = next_cursor
         
         return {
             "usage": usage_data,
-            "last_usage_date": self._billing_day_start(last_timestamp) if last_timestamp else self._billing_day_start(startOn)
+            "last_usage_date": self._billing_day_start(last_timestamp) if last_timestamp else self._billing_day_start(start_on)
         }
 
-    async def get_billing_dates(self, account_id: str) -> dict[str, Any]:
-        billing_dates_data = await self._run_query(
+    def _parse_billing_date(self, value: str, *, end_of_day: bool = False) -> datetime:
+        """Parse a Powershop billing date in the integration timezone."""
+        parsed = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=TIMEZONE)
+        if end_of_day:
+            parsed = parsed.replace(hour=23, minute=59, second=59)
+        return parsed
+
+    async def get_billing_dates(self, account_id: str) -> BillingDates:
+        billing_dates_data: dict[str, Any] = await self._run_query(
             QUERY_BILLING_DATES, {"accountNumber": account_id}
         )        
 
-        next_billing_date = billing_dates_data.get("account", {}).get("billingOptions", {}).get("nextBillingDate", "1970-01-01")
-        billing_period_start_date = billing_dates_data.get("account", {}).get("billingOptions", {}).get("currentBillingPeriodStartDate", "1970-01-01")
-        billing_period_end_date = billing_dates_data.get("account", {}).get("billingOptions", {}).get("currentBillingPeriodEndDate", "1970-01-01")
+        account = billing_dates_data.get("account") or {}
+        billing_options = account.get("billingOptions") or {}
+        next_billing_date: str = billing_options.get("nextBillingDate", "1970-01-01")
+        billing_period_start_date: str = billing_options.get("currentBillingPeriodStartDate", "1970-01-01")
+        billing_period_end_date: str = billing_options.get("currentBillingPeriodEndDate", "1970-01-01")
+        current_start = self._parse_billing_date(billing_period_start_date)
+        current_end = self._parse_billing_date(
+            billing_period_end_date, end_of_day=True
+        )
+        previous_start = current_start - relativedelta(months=1)
+        previous_end = current_end - relativedelta(months=1)
         return {
              "current": {
                 "datetime": {
-                    "next_billing_date": datetime.strptime(next_billing_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE),
-                    "billing_period_start_date": datetime.strptime(billing_period_start_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE),
-                    "billing_period_end_date": datetime.strptime(billing_period_end_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE, hour=23, minute=59, second=59),
+                    "next_billing_date": self._parse_billing_date(next_billing_date),
+                    "billing_period_start_date": current_start,
+                    "billing_period_end_date": current_end,
                 },
                 "string":{
                     "next_billing_date": next_billing_date, 
@@ -740,12 +815,12 @@ class PowershopApiClient:
             },
              "previous": {
                 "datetime": {
-                    "billing_period_start_date": datetime.strptime(billing_period_start_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE) - relativedelta(months=1),
-                    "billing_period_end_date": datetime.strptime(billing_period_end_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE, hour=23, minute=59, second=59) - relativedelta(months=1),
+                    "billing_period_start_date": previous_start,
+                    "billing_period_end_date": previous_end,
                 },
                 "string":{
-                    "billing_period_start_date": (datetime.strptime(billing_period_start_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE) - relativedelta(months=1)).strftime("%Y-%m-%d"),
-                    "billing_period_end_date": (datetime.strptime(billing_period_end_date, "%Y-%m-%d").replace(tzinfo=TIMEZONE, hour=23, minute=59, second=59) - relativedelta(months=1)).strftime("%Y-%m-%d")
+                    "billing_period_start_date": previous_start.strftime("%Y-%m-%d"),
+                    "billing_period_end_date": previous_end.strftime("%Y-%m-%d")
                 }
             }
         }

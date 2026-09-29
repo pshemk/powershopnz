@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date, time, timedelta, datetime
 import logging
 import asyncio
@@ -19,10 +20,6 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.start import async_at_started
 
 from homeassistant.util import dt as dt_util
-
-from homeassistant.const import (
-    CONF_SCAN_INTERVAL,
-)
 
 from .api import (
     PowershopApiClient,
@@ -44,6 +41,8 @@ from .const import (
 type PowershopConfigEntry = ConfigEntry[RuntimeData]
 
 _LOGGER = logging.getLogger(__name__)
+
+type Powerpack = dict[str, Any]
 
 STORE_NAMES = (
     "rates_schedule",
@@ -68,20 +67,20 @@ class PowershopCoordinator(
     ) -> None:
         """Initialize the coordinator."""
 
-        self.refresh_token = config_entry.data[CONF_REFRESH_TOKEN]
-        self._account_id = config_entry.data[CONF_ACCOUNT_ID]
-        self._property_id = config_entry.data[CONF_PROPERTY_ID]
-        self._property_address = config_entry.data[CONF_PROPERTY_ADDRESS]
-        self._config_entry = config_entry
-        self._poll_interval = config_entry.options.get(CONF_SCAN_INTERVAL, timedelta(seconds=DEFAULT_UPDATE_INTERVAL))
-        self._last_api_call = None
+        self.refresh_token: str = config_entry.data[CONF_REFRESH_TOKEN]
+        self._account_id: str = config_entry.data[CONF_ACCOUNT_ID]
+        self._property_id: str = config_entry.data[CONF_PROPERTY_ID]
+        self._property_address: str = config_entry.data[CONF_PROPERTY_ADDRESS]
+        self._config_entry: PowershopConfigEntry = config_entry
+        self._poll_interval: timedelta = timedelta(seconds=DEFAULT_UPDATE_INTERVAL)
+        self._last_api_call: datetime | None = None
 
-        self._stores = {
+        self._stores: dict[str, PowershopStore] = {
             name: PowershopStore(hass, f"{self._property_id}_{name}")
             for name in STORE_NAMES
         }
 
-        self.hass = hass
+        self.hass: HomeAssistant = hass
 
         _LOGGER.debug("coordinator init")
         super().__init__(
@@ -91,15 +90,15 @@ class PowershopCoordinator(
             update_interval=self._poll_interval
         )
 
-        self._usage_fetch_task: asyncio.Task | None = None
-        self._usage_process_task: asyncio.Task | None = None
-        self._data_expiry_task: asyncio.Task | None = None
+        self._usage_fetch_task: asyncio.Task[Any] | None = None
+        self._usage_process_task: asyncio.Task[Any] | None = None
+        self._data_expiry_task: asyncio.Task[Any] | None = None
 
-        self._cancel_usage_fetch_schedule = None
-        self._cancel_usage_process_schedule = None
-        self._cancel_data_expiry_task = None
+        self._cancel_usage_fetch_schedule: Callable[[], None] | None = None
+        self._cancel_usage_process_schedule: Callable[[], None] | None = None
+        self._cancel_data_expiry_task: Callable[[], None] | None = None
 
-        self._api_client = PowershopApiClient(
+        self._api_client: PowershopApiClient = PowershopApiClient(
             self.refresh_token,
             session=async_get_clientsession(hass),
         )
@@ -156,7 +155,7 @@ class PowershopCoordinator(
             _LOGGER.debug(f"post processed: {self._config_entry.options}")
 
 
-    async def _schedule_usage_fetch(self, *args) -> None:
+    async def _schedule_usage_fetch(self, *args: Any) -> None:
         """Start a usage-fetch task when none is already running."""
 
         if  self._usage_fetch_task is not None and not self._usage_fetch_task.done():
@@ -167,18 +166,18 @@ class PowershopCoordinator(
             self._async_update_usage()
         )
 
-    async def _schedule_usage_process(self, *args) -> None:
+    async def _schedule_usage_process(self, *args: Any) -> None:
         """Start a usage-processing task when none is already running, wait otherwise."""
 
         while  self._usage_process_task is not None and not self._usage_process_task.done():
             _LOGGER.debug("Usage process is  already running, sleeping for a bit")
-            asyncio.sleep(10)
+            await asyncio.sleep(10)
         
         self._usage_process_task = self.hass.async_create_task(
             self._async_process_usage()
         )
 
-    async def _schedule_data_expiry(self, *args) -> None:
+    async def _schedule_data_expiry(self, *args: Any) -> None:
         """Start a data expiry task when none is already running."""
 
         if  self._data_expiry_task is not None and not self._data_expiry_task.done():
@@ -224,7 +223,7 @@ class PowershopCoordinator(
             *(store.async_load() for store in self._stores.values())
         )
 
-    def _get_powerpacks(self, day: str) -> list[dict[str, Any]]:
+    def _get_powerpacks(self, day: str) -> list[Powerpack]:
         # _LOGGER.debug(f"getting powerpacks for {day}")
         max_counter = 10
         while max_counter > 0:
@@ -242,6 +241,8 @@ class PowershopCoordinator(
             # _LOGGER.debug("getting a reference to %s from %s", self._stores["powerpacks"].data.get(day, {}).get("same_as", ""), day)
             return self._stores["powerpacks"].data.get(self._stores["powerpacks"].data.get(day, {}).get("same_as", ""), {}).get("powerpacks", [])  
 
+        return []
+
     def _str_to_timestamp(self, data: dict[str, str]) -> dict[str, datetime]:
         """Convert stored ISO timestamp strings into datetime objects."""
 
@@ -250,7 +251,7 @@ class PowershopCoordinator(
             for k, v in data.items() if isinstance(v, str)
         }
 
-    def _any_to_timestamp(self, in_timestamp: str) -> datetime:
+    def _any_to_timestamp(self, in_timestamp: Any) -> datetime:
         if isinstance(in_timestamp, datetime):
             return in_timestamp
         if isinstance(in_timestamp, (str)):
@@ -261,7 +262,7 @@ class PowershopCoordinator(
         _LOGGER.debug("Can't convert date of type %s, returning epoch", type(in_timestamp))
         return datetime.fromtimestamp(0, dt_util.get_time_zone("Pacific/Auckland"))
  
-    def _calculate_effective_cost(self, day: str, billing_period_day: int,  billing_period_cost: float) -> dict[str, Any]: 
+    def _calculate_effective_cost(self, day: str, billing_period_day: int,  billing_period_cost: float) -> tuple[float, float, str]: 
 
         #Determine effective costs, by using the purchased powerpacks
         powerpacks = list.copy(self._get_powerpacks(day))
@@ -284,7 +285,6 @@ class PowershopCoordinator(
         if total_cost > 0:
             amount_paid += total_cost
         
-        consumption_cost = 0
         billing_rates = self._stores["rates"].data.get(datetime.strptime(day, "%Y-%m-%d").strftime("%m"), {})
         daily_cost = billing_period_day * billing_rates.get("daily_charge", {}).get("rate", 0)
 
@@ -712,7 +712,9 @@ class PowershopCoordinator(
 
                 current_final_ratio, current_amount_paid, current_powerpacks_used = self._calculate_effective_cost(now.strftime("%Y-%m-%d"), current_billing_period_usage_by_rate["daily_charge"], current_billing_period_cost)
 
-                previous_final_ratio, previous_amount_paid, _ = self._calculate_effective_cost(previous_last_seen_date.strftime("%Y-%m-%d"), previous_billing_period_usage_by_rate["daily_charge"], previous_billing_period_cost)
+                previous_amount_paid = 0
+                if previous_last_seen_date is not None:
+                    _, previous_amount_paid, _ = self._calculate_effective_cost(previous_last_seen_date.strftime("%Y-%m-%d"), previous_billing_period_usage_by_rate["daily_charge"], previous_billing_period_cost)
 
                 # Store all values, so the sensors can pull them out when needed
                 # this also ensures that when HA starts there's something to return saving on shifts from 'unknown' state
@@ -775,26 +777,31 @@ class PowershopCoordinator(
         )
 
     async def get_historical_data(self, type: str) -> dict[str, Any]:
-        """Return historical sensor data keyed by Unix timestamp."""
+        """Return historical data keyed by Unix timestamp."""
 
-        historical_data = self._stores["sensors"].data.get("historical",{}).get(type,{})
-        historical_data_filtered = {}
+        historical_data = self._stores["sensors"].data.get("historical", {}).get(type, {})
+        start_timestamp = self._any_to_timestamp(
+            self._stores["state"].data.get(f"last_timestamp_{type}")
+        )
 
-        #check if we have data for this historical sensor
-        if historical_data:
+        historical_data_filtered: dict[float, Any] = {}
+        latest_timestamp: datetime | None = None
 
-            start_timestamp = self._any_to_timestamp(self._stores["state"].data.get(f"last_timestamp_{type}"))
+        for timestamp, value in historical_data.items():
+            current_timestamp = self._any_to_timestamp(timestamp)
+            if current_timestamp < start_timestamp:
+                continue
 
-            for timestamp, value in historical_data.items():
-                ts = self._any_to_timestamp(timestamp)
-                if ts >= start_timestamp:
-                    historical_data_filtered[float(ts.timestamp())] = value
-                    last_timestamp = ts
-            
-                    await self._stores["state"].async_save({
-                        **self._stores["state"].data,
-                        f"last_timestamp_{type}": last_timestamp.isoformat()
-                    })
+            historical_data_filtered[current_timestamp.timestamp()] = value
+
+            if latest_timestamp is None or current_timestamp > latest_timestamp:
+                latest_timestamp = current_timestamp
+
+        if latest_timestamp is not None:
+            await self._stores["state"].async_save({
+                **self._stores["state"].data,
+                f"last_timestamp_{type}": latest_timestamp.isoformat(),
+            })
 
         return historical_data_filtered
 
