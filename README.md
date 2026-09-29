@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![GitHub Release](https://img.shields.io/github/release/pshemk/powershopnz.svg)](https://github.com/pshemk/powershopnz/releases)
-[![Zip downloads](https://img.shields.io/github/downloads/pshemk/powershopnz/total.svg)]
+![Zip downloads](https://img.shields.io/github/downloads/pshemk/powershopnz/total.svg)
 
 A Home Assistant custom integration that pulls data from your Powershop New Zealand account. 
 
