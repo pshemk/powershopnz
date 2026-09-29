@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import logging
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -532,20 +532,20 @@ class PowershopApiClient:
             _LOGGER.warning("GraphQL errors: %s", data["errors"])
             raise ValueError(data["errors"][0].get("message", "GraphQL error"))
         # _LOGGER.debug(f"GraphQL data: {body}")            
-        return data.get("data", {})
+        return cast(dict[str, Any], data.get("data", {}))
 
 
     async def get_properties(self) -> list[PropertyInfo]:
         accounts: dict[str, Any] = await self._run_query(
             QUERY_ACCOUNTS
         )
-        properties: list[dict[str, Any]] = []
+        properties: list[PropertyInfo] = []
         viewer = accounts.get("viewer") or {}
         for account in viewer.get("accounts") or []:
             _LOGGER.debug(f"account: {account}")
             for property_data in account.get("properties") or []:
                 _LOGGER.debug("property: %s", property_data)
-                meter_points: list[dict[str, str]] = []
+                meter_points: list[MeterPoint] = []
                 for meter_point in property_data.get("meterPoints") or []:
                     meter_points.append({"id": meter_point["id"], "market_identifier": meter_point["marketIdentifier"]})
                 properties.append({

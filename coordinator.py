@@ -387,7 +387,7 @@ class PowershopCoordinator(
                         #or we're updating current date
                         if not self._stores["powerpacks"].data.get(day_date) or day_date == today:
                             if balance != last_balance:
-                                _LOGGER.debug(f"day: {day_date} - balance change")
+                                # _LOGGER.debug(f"day: {day_date} - balance change")
                                 powerpacks_by_date[day_date] = {
                                     "type": "list",
                                     "powerpacks": powerpacks_purchased
@@ -395,7 +395,7 @@ class PowershopCoordinator(
                                 last_balance = balance
                                 last_day = day_date
                             else:
-                                _LOGGER.debug(f"day: {day_date} - no balance change")
+                                # _LOGGER.debug(f"day: {day_date} - no balance change")
                                 powerpacks_by_date[day_date] = {
                                     "type": "reference",
                                     "same_as": last_day
