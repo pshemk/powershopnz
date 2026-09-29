@@ -47,6 +47,8 @@ This integration can be installed using HACS custom integration:
 
 The icon currently doesn't work in HACS, due to a bug in HACS. 
 
+<!-- [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=pshemk&repository=https%3A%2F%2Fgithub.com%2Fpshemk%2Fpowershopnz&category=Integration) -->
+
 ## Sensors
 
 The integration provides the following regular sensors. All entities are in the `sensor.` domain.
