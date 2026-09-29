@@ -23,7 +23,8 @@ from homeassistant.util import dt as dt_util
 
 from .api import (
     PowershopApiClient,
-    RefreshTokenInvalidError
+    RefreshTokenInvalidError,
+    AuthError
 )
 from .store import PowershopStore
 

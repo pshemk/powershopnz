@@ -330,7 +330,7 @@ QUERY_USAGE = """
 """
 
 class AuthError(Exception):
-    """Raised when authentication fails (email not found, token expired, etc.)."""
+    """Raised when authentication fails (generic)."""
 
 class RefreshTokenInvalidError(AuthError):
     """Refresh token is invalid or has been revoked."""    

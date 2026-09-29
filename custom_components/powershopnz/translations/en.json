@@ -51,6 +51,9 @@
     },
     "abort": {
       "reauth_successful": "Your Powershop NZ account has been successfully re-authenticated"
+    },
+    "error": {
+      "invalid_otp": "Provided code is not valid, please check it and try again."
     }
   },
   "options": {

@@ -26,7 +26,7 @@ A sensor that reports the current rate type  (peak, off-peak, or any other retur
 
 ### Side-loading of historical information
 
-Past power usage and costs are available to Home Assistant as statistics. That means that the historical information can be used to populate the fantastic Energy Dashboard. 
+Past power usage and costs are available to Home Assistant as statistics. That means that the historical information can be used to populate the fantastic Energy Dashboard. The historical information includes both usage and cost. The usage is also split into the various rates that are available to your account.
 
 ### Highly customisable
 
@@ -98,6 +98,13 @@ The following sensors provide additional information through attributes:
 | Powerpacks: available balance | `powerpacks`| List of available powerpacks |
 | Powerpacks: future balance | `powerpacks` | List of powerpacks that will be available in future | 
 
+## Calculations of the effective rates
+
+These calulcations are done entirely in the integration (i.e. the API doesn't provide anything discounted pricing information beyond the purchased powerpacks). Each powerpack has an inherit discount rate (for example if you purchased it for $10 but it covers $20 of power the rate is 0.5). The "Staying Power" are generally 0.75 to 0.8 and the future packs are around 0.9 (those rates can be seen in the attribures of the "Powerpacks" sensors). The special powerpacks vary wildly, sometimes as low as 0.5. 
+
+When another day of usage data for the biling period is made available the intgration identifies the powerpacks that offer the best rates and calculates the total amount of money spent on those powerpacks. Than, the daily charge for that period is substracted (using nominal rates) resulting in total amount of money spent on energy alone. A calculation is also done for the nominal power rates over the same period of time.  Than the powerpack usage costs are divided by the nominal usage costs. The result is stored in the `Effective cost ratio` sensor. For each new day the whole calculation is repeated (each time usage data is taken from the start of the billing period). That effective cost ratio is than used to calculate various "effective" rates. All those rates are indicative only, as they're only valid for that one day. Only the last day of the billing cycle offers a true insight into the discounts. 
+
+
 ## Notes
 
 During the first run the integration attempts to download all available usage information. That might take a few minutes to complete. Only once the data has been downloaded the sensor values are be populated. 
@@ -120,6 +127,15 @@ The way power prices are structured varies widely across the country. The types 
 2. Historical data that's loaded into statistics (like past power usage or past cost) can not be updated once stored. Since Powershop doesn't always release past usage information in a chronological order newer data always blocks older data from being stored, that leads to gaps in the statistics. So far I have not found a user-friendly workaround. Deleting the integration does not delete the statistics from Home Assistant either. The only way to delete them right now is to delete them from the database directly. 
 3. The accuracy of past information is not great initially. That's because a lot of historical information (like past rates or already consumed powerpacks) are not accessible via the API. This integration stores all the information as the time progresses and after two full billing cycles the past usage and pricing will be accurate. 
 4. If the long-term statistics appear skewed and don't align with the dates - check the timezone settings of the underlying system/container. This is not an issue in HAOS. 
+
+## Issues, bugs and new features
+
+This type of integration is not easy to test. I only have my own account to test with, which has a very specfic setup. Your account setup is almost certainly different from mine, so if things don't work for you please open an issue and provide the following information:
+- The supplier network you're connected to
+- The type of meter you have - it's either a unified one (in that case on your power bill there's only one meter ending in `:1`) or a split one (in that case you'll see two meters there ending in `:1` and `:2`)
+- Any logs you have from the integration
+
+If you'd like to see some addtional features - please open an issue as well.
 
 ## Examples 
 
