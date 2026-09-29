@@ -237,6 +237,9 @@ grid_options:
 
 ## Releases
 
+### v1.0.5 (2026-09-29)
+- move away from a flat directory structure into custom_components
+
 ### v1.0.4 (2026-09-29)
 - Expire old data
 - Make re-auth flow functional
