@@ -27,9 +27,9 @@ jobs:
         shell: "bash"
         run: |
           cd "${{ github.workspace }}/custom_components/powershopnz/"
-          zip powershopnz.zip -r ./
+          zip powershopnz.zip -r ./ -x images
 
       - name: "Upload the ZIP file to the release"
         uses: softprops/action-gh-release@v2.2.1
         with:
-          files: ${{ github.workspace }}/custom_components/powershopnz//owershopnz.zip
+          files: ${{ github.workspace }}/custom_components/powershopnz/powershopnz.zip
