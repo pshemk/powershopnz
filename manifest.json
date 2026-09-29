@@ -11,6 +11,7 @@
   ],
   "iot_class": "cloud_polling",
    "dependencies": [
-    "statistics"
+    "statistics",
+    "recorder"
    ]
 }
