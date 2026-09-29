@@ -50,10 +50,7 @@
       }
     },
     "abort": {
-      "reauth_successful": {
-        "title": "Powershop NZ account reconnected",
-        "description": "Your Powershop NZ account has been successfully re-authenticated and is ready to use."
-      }
+      "reauth_successful": "Your Powershop NZ account has been successfully re-authenticated"
     }
   },
   "options": {
