@@ -254,6 +254,10 @@ grid_options:
 
 ## Releases
 
+### v1.0.6 (2026-10-01)
+- improve handling of powerpack purchases
+- fix a bug when a powerpack was allocated to a day using UTC timezone
+
 ### v1.0.5 (2026-09-29)
 - move away from a flat directory structure into custom_components
 

@@ -20,6 +20,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.start import async_at_started
 
 from homeassistant.util import dt as dt_util
+from zoneinfo import ZoneInfo
 
 from .api import (
     PowershopApiClient,
@@ -327,7 +328,9 @@ class PowershopCoordinator(
                 #         "powerpacks_available_balance"
                 #     ),
                 # )
-                if powerpacks_balances["powerpacks_available_balance"] != self._stores["powerpacks_balances"].data.get("powerpacks_available_balance") or not self._last_api_call:
+                if (powerpacks_balances["powerpacks_available_balance"] != self._stores["powerpacks_balances"].data.get("powerpacks_available_balance") or 
+                    powerpacks_balances["powerpacks_future_balance"] != self._stores["powerpacks_balances"].data.get("powerpacks_future_balance") or 
+                    not self._last_api_call):
                     _LOGGER.debug("powerpacks balance has changed (or just started), refreshing powerpacks")
                     refresh_powerpacks = True
 
@@ -380,7 +383,7 @@ class PowershopCoordinator(
                         day_date = day.strftime("%Y-%m-%d")
                         
                         for powerpack in powerpacks:
-                            if datetime.fromisoformat(powerpack["purchasedAt"]).strftime("%Y-%m-%d") <= day_date:
+                            if datetime.fromisoformat(powerpack["purchasedAt"]).astimezone(ZoneInfo("Pacific/Auckland")).strftime("%Y-%m-%d") <= day_date:
                                 balance += powerpack["balance"]
                                 powerpacks_purchased.append(powerpack)
 
@@ -389,7 +392,7 @@ class PowershopCoordinator(
                         #or we're updating current date
                         if not self._stores["powerpacks"].data.get(day_date) or day_date == today:
                             if balance != last_balance:
-                                # _LOGGER.debug(f"day: {day_date} - balance change")
+                                # _LOGGER.debug(f"day: {day_date} - balance change {balance}")
                                 powerpacks_by_date[day_date] = {
                                     "type": "list",
                                     "powerpacks": powerpacks_purchased
@@ -397,7 +400,7 @@ class PowershopCoordinator(
                                 last_balance = balance
                                 last_day = day_date
                             else:
-                                # _LOGGER.debug(f"day: {day_date} - no balance change")
+                                # _LOGGER.debug(f"day: {day_date} - no balance change {balance}")
                                 powerpacks_by_date[day_date] = {
                                     "type": "reference",
                                     "same_as": last_day
