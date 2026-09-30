@@ -285,6 +285,7 @@ class PowershopCoordinator(
                 
         if total_cost > 0:
             amount_paid += total_cost
+            powerpacks_used += f"Regular power ${total_cost:.2f}"
         
         billing_rates = self._stores["rates"].data.get(datetime.strptime(day, "%Y-%m-%d").strftime("%m"), {})
         daily_cost = billing_period_day * billing_rates.get("daily_charge", {}).get("rate", 0)
@@ -401,6 +402,10 @@ class PowershopCoordinator(
                                     "type": "reference",
                                     "same_as": last_day
                                 }
+                        else:
+                            last_balance = balance
+                            last_day = day_date
+
                         
                         day += timedelta(days=1)
 
