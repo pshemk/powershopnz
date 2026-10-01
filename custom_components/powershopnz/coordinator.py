@@ -753,7 +753,7 @@ class PowershopCoordinator(
                                     for key, value in previous_billing_period_usage_by_rate.items()},
 
                         **{f"effective_unit_cost_{key}": value.get("rate") * current_final_ratio
-                                    for key, value in self._stores["rates"].data.get(current_billing_period_month, {}).items() if key != 'daily_charge'},
+                                    for key, value in self._stores["rates"].data.get(now.strftime("%m"), {}).items() if key != 'daily_charge'},
                         'effective_cost_ratio': current_final_ratio,
                     },
                     'attributes':{
