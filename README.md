@@ -254,6 +254,9 @@ grid_options:
 
 ## Releases
 
+### v1.0.10
+- added logo
+
 ### v1.0.9
 - futher improvments to the logic handling switchover between the billing cycles
 
