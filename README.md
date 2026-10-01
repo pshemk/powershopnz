@@ -254,25 +254,28 @@ grid_options:
 
 ## Releases
 
-### v1.0.7 (2026-10-01)
-- fix a bug, where the current effective rates were using first day of the billing cycle, not the current month rates
+### v1.0.8 (2026-10-01)
+- improved handling of the first day of the billing cycle, now it returns the previous day effective ratio, unless it's also unknown, in which case 1 is returned as the ratio
 
+
+### v1.0.7 (2026-10-01)
+- fixed a bug, where the current effective rates were using first day of the billing cycle, not the current month rates
 
 ### v1.0.6 (2026-10-01)
 - improve handling of powerpack purchases
-- fix a bug when a powerpack was allocated to a day using UTC timezone
+- fixed a bug when a powerpack was allocated to a day using UTC timezone
 
 ### v1.0.5 (2026-09-29)
-- move away from a flat directory structure into custom_components
+- moved away from a flat directory structure into custom_components
 
 ### v1.0.4 (2026-09-29)
-- Expire old data
-- Make re-auth flow functional
-- Fix powerpacks storing and processing logic
+- Add expiry of old data
+- Made re-auth flow functional
+- Fixed powerpacks storing and processing logic
 
 ### v1.0.2 and v1.0.3 (2026-09-28)
-- Fix of an initial crash when starting fresh
-- Fix to timezone skew for long term statistics when running on HAOS
+- Fixed of an initial crash when starting fresh
+- Fixed to timezone skew for long term statistics when running on HAOS
 
 ### v1.0.0 (2026-09-27)
 - First release
