@@ -264,11 +264,11 @@ class PowershopCoordinator(
         _LOGGER.debug("Can't convert date of type %s, returning epoch", type(in_timestamp))
         return datetime.fromtimestamp(0, dt_util.get_time_zone("Pacific/Auckland"))
  
-    def _calculate_effective_cost(self, day: str, billing_period_day: int,  billing_period_cost: float) -> tuple[float| None, float, str]: 
+    def _calculate_effective_cost(self, day: str, billing_period_day: int,  billing_period_cost: float) -> tuple[float, float, str]: 
 
-        #Check if there's anything to pay, if not - return None as the ratio (no powerpacks used)  
+        #Check if there's anything to pay, if not - return 0 as the ratio (no powerpacks used)  
         if billing_period_cost <= 0:  
-            return None, 0.0, ""
+            return 0, 0.0, ""
 
         #Determine effective costs, by using the purchased powerpacks
         powerpacks = list.copy(self._get_powerpacks(day))
@@ -721,18 +721,19 @@ class PowershopCoordinator(
                     record_month = timestamp.strftime("%m")
                     record_day = timestamp.strftime("%Y-%m-%d")
                     hourly_charge = self._stores["rates"].data.get(record_month, {}).get("daily_charge", {}).get("rate", 0)/24 
-                    if effective_cost_ratio_by_day.get(record_day) is not None:             
-                        effective_cost_sensor_total[timestamp] = (value - hourly_charge) * effective_cost_ratio_by_day.get(record_day) + hourly_charge
-                    else:
-                        #use the ratio from the previous day, if available, otherwise use 1 (no powerpacks used)
-                        previous_day = (timestamp - timedelta(days=1)).strftime("%Y-%m-%d")
-                        effective_cost_sensor_total[timestamp] = (value - hourly_charge) * effective_cost_ratio_by_day.get(previous_day, 1) + hourly_charge     
+                    if effective_cost_ratio_by_day.get(record_day) is not None and hourly_charge is not None:
+                        if effective_cost_ratio_by_day.get(record_day) != 0:             
+                            effective_cost_sensor_total[timestamp] = (value - hourly_charge) * effective_cost_ratio_by_day.get(record_day) + hourly_charge
+                        else:
+                            #use the ratio from the previous day, if available, otherwise use 1 (no powerpacks used)
+                            previous_day = (timestamp - timedelta(days=1)).strftime("%Y-%m-%d")
+                            effective_cost_sensor_total[timestamp] = (value - hourly_charge) * effective_cost_ratio_by_day.get(previous_day, 1) + hourly_charge     
 
                 current_final_ratio, current_amount_paid, current_powerpacks_used = self._calculate_effective_cost(now.strftime("%Y-%m-%d"), current_billing_period_usage_by_rate["daily_charge"], current_billing_period_cost)
-                if current_final_ratio is None:
+                if current_final_ratio == 0:
                     #use the previous days ratio if available, otherwise use 1 (no powerpacks used)
                     previous_day = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-                    current_final_ratio, _, _  = effective_cost_ratio_by_day.get(previous_day, 1)
+                    current_final_ratio = effective_cost_ratio_by_day.get(previous_day, 1)
                     current_amount_paid, current_powerpacks_used = 0, ""
 
                 previous_amount_paid = 0
