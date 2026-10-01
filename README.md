@@ -254,6 +254,10 @@ grid_options:
 
 ## Releases
 
+### v1.0.7 (2026-10-01)
+- fix a bug, where the current effective rates were using first day of the billing cycle, not the current month rates
+
+
 ### v1.0.6 (2026-10-01)
 - improve handling of powerpack purchases
 - fix a bug when a powerpack was allocated to a day using UTC timezone
