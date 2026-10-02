@@ -109,23 +109,23 @@ When another day of usage data for the biling period is made available the intgr
 
 During the first run the integration attempts to download all available usage information. That might take a few minutes to complete. Only once the data has been downloaded the sensor values are be populated. 
 
-The effective rates and costs are recalculated every time a powerpack is purchased or past usage information is made available by Powershop. That means that the rate fluctuates as consumption changes. The daily effective rate (and the historical effective power cost) changes daily and only provides an approximate cost throughout the billing period, becoming most accurate on the last day of the billing period.
+The effective rates and costs are recalculated every time a powerpack is purchased or past usage information is made available by Powershop. That means that the rate fluctuates as consumption changes and tends to decrease as the days of the billing period progress if you keep buying the special powerpacks. If there's no usage data for the billing period yet, the ratio remains at 1. The daily effective rate (and the historical effective power cost) changes daily and only provides an approximate cost throughout the billing period, becoming most accurate on the last day of the billing period. The  "effective cost per day" calculated for the previous days of the biling period is never updated once stored.
 
-The effective cost ratio is calculated only using the costs of units (kWh) of energy. The daily charge always remains unaffected by the ratio, which is the same Powershop presents their "special" rates. It's worth noting that the official "special" rates are indicative only. 
+The effective cost ratio is calculated only using the costs of units (kWh) of energy. The daily charge always remains unaffected by the ratio, which is the same way Powershop presents their "special" rates.
 
-All costs are calculated in the integration, so there might be some small differences when it comes to nominal costs due to rounding. It's done this way because downloading both costs and usage seems to be much slower than downloading the usage alone; also, calculating the costs in the integration makes it easier to calculate the discounted rates. 
+All costs are calculated in the integration, so there might be some small differences when it comes to nominal costs due to rounding. It's done this way because downloading both costs and usage seems to be much slower than downloading the usage alone; also, calculating the costs in the integration makes it easier to calculate the effective costs. 
 
-The statistics are always with 1h resolution, but due to the way they're loaded (using the historical sensor) they don't behave exactly the same way regular sensors do. Please have a look at the examples. 
+The historical data is always with 1h resolution, but due to the way it's loaded (using the historical sensor) it don't behave exactly the same way regular sensors do. The most important difference is that they never have the current value, hence they can only be used for statistical purposes.  Please have a look at the examples. 
 
 The billing period always rolls over into the next one before all data is available (powerpacks are "consumed" on the last day of the billing cycle when there's still no usage information for the last day). The billing period data then become available in the 'Previous billing' sensors. 
 
-The way power prices are structured varies widely across the country. The types of rates as well as meter setups are different between different local lines companies. I live in West Auckland on Vector's network and that's what I've been testing with. If you're in a different part of the country and the integration doesn't work for you - please open an issue. 
+The way power prices are structured varies widely across the country. The types of rates as well as meter setups are different between different local lines companies. The integration pulls all that data from the API, but that also means that there's no easy way of testing all of the possible setups.  I live in West Auckland on Vector's network and that's what I've been testing with. If you're in a different part of the country and the integration doesn't work for you - please open an issue. 
 
 ## Known issues
 
-1. Switching between rates (peak/off-peak) doesn't happen at exact times. The integration updates the sensor with the current rate type every 30 seconds. 
-2. Historical data that's loaded into statistics (like past power usage or past cost) can not be updated once stored. Since Powershop doesn't always release past usage information in a chronological order newer data always blocks older data from being stored, that leads to gaps in the statistics. So far I have not found a user-friendly workaround. Deleting the integration does not delete the statistics from Home Assistant either. The only way to delete them right now is to delete them from the database directly. 
-3. The accuracy of past information is not great initially. That's because a lot of historical information (like past rates or already consumed powerpacks) are not accessible via the API. This integration stores all the information as the time progresses and after two full billing cycles the past usage and pricing will be accurate. 
+1. Switching between rates (peak/off-peak/night) doesn't happen at the exact times. The integration updates the sensor with the current rate type every 30 seconds. 
+2. Historical data that's loaded into statistics (like past power usage or past cost) can not be back-filled  once stored. Since Powershop doesn't always release past usage information in a chronological order newer data always blocks older data from being stored. That leads to gaps in the statistics. So far I have not found a user-friendly workaround. Deleting the integration does not delete the statistics from Home Assistant either. The only way to delete them right now is to delete them from the database directly. 
+3. The accuracy of the  information about past billing cycle is not great until the current billing cycle become the past one. That's because a lot of historical information (like past rates or already consumed powerpacks) are not accessible via the API. This integration stores all the information and as the time progresses and after two full billing cycles the past usage and pricing will be accurate. 
 4. If the long-term statistics appear skewed and don't align with the dates - check the timezone settings of the underlying system/container. This is not an issue in HAOS. 
 
 ## Issues, bugs and new features
@@ -254,8 +254,12 @@ grid_options:
 
 ## Releases
 
+### v1.0.11
+- fixed a bug when in some circumstance the ratio can drop to 0 if there's no data for 2 days.
+
+
 ### v1.0.10
-- added logo
+- added logo (still doesn't work due to a bug in HACS)
 
 ### v1.0.9
 - futher improvments to the logic handling switchover between the billing cycles

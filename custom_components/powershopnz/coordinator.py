@@ -266,9 +266,9 @@ class PowershopCoordinator(
  
     def _calculate_effective_cost(self, day: str, billing_period_day: int,  billing_period_cost: float) -> tuple[float, float, str]: 
 
-        #Check if there's anything to pay, if not - return 0 as the ratio (no powerpacks used)  
-        if billing_period_cost <= 0:  
-            return 0, 0.0, ""
+        #Check if there's anything to pay, if not - return 1 as the ratio (no powerpacks used)  
+        if billing_period_cost == 0:  
+            return 1, 0.0, ""
 
         #Determine effective costs, by using the purchased powerpacks
         powerpacks = list.copy(self._get_powerpacks(day))
