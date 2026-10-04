@@ -264,14 +264,18 @@ class PowershopCoordinator(
         _LOGGER.debug("Can't convert date of type %s, returning epoch", type(in_timestamp))
         return datetime.fromtimestamp(0, dt_util.get_time_zone("Pacific/Auckland"))
  
-    def _calculate_effective_cost(self, day: str, billing_period_day: int,  billing_period_cost: float) -> tuple[float, float, str]: 
+    def _calculate_effective_cost(self, day: str, billing_period_day: int,  billing_period_cost: float, debug: bool = False) -> tuple[float, float, str]: 
 
         #Check if there's anything to pay, if not - return 1 as the ratio (no powerpacks used)  
         if billing_period_cost == 0:  
+            # _LOGGER.debug("day %s billing period cost is 0, returning ratio 1", day)
             return 1, 0.0, ""
 
         #Determine effective costs, by using the purchased powerpacks
         powerpacks = list.copy(self._get_powerpacks(day))
+
+        # if debug:
+        #     _LOGGER.debug(f"day {day} powerpacks: {powerpacks}")
 
         amount_paid = 0
         total_cost = billing_period_cost
@@ -297,7 +301,8 @@ class PowershopCoordinator(
 
         final_ratio = (amount_paid - daily_cost) / (billing_period_cost - daily_cost) if billing_period_cost - daily_cost != 0 else 1
 
-        # _LOGGER.debug(f"day {day} paid: {amount_paid} cost: {billing_period_cost:.2f}, dc: {daily_cost:.2f}, r: {final_ratio}")
+        if debug:
+            _LOGGER.debug(f"day {day} paid: {amount_paid} cost: {billing_period_cost:.2f}, dc: {daily_cost:.2f}, r: {final_ratio}, powerpacks used: {powerpacks_used}")
         return final_ratio, amount_paid, powerpacks_used
 
 
@@ -384,42 +389,64 @@ class PowershopCoordinator(
                         
                         powerpacks_purchased = []
                         balance = 0
+                        available_balance = 0
+                        future_balance = 0
+
                         day_date = day.strftime("%Y-%m-%d")
                         
                         for powerpack in powerpacks:
                             if datetime.fromisoformat(powerpack["purchasedAt"]).astimezone(ZoneInfo("Pacific/Auckland")).strftime("%Y-%m-%d") <= day_date:
                                 balance += powerpack["balance"]
                                 powerpacks_purchased.append(powerpack)
+                                if datetime.strptime(powerpack["availableFrom"], "%Y-%m-%d").astimezone(ZoneInfo("Pacific/Auckland"))  <= day:
+                                    available_balance += powerpack["balance"]
+                                else:
+                                    future_balance += powerpack["balance"]
 
                         powerpacks_purchased.sort(key=lambda x: x['ratio'], reverse=False)
                         #Only make changes to powerpacks if we don't have the data already
                         #or we're updating current date
                         if not self._stores["powerpacks"].data.get(day_date) or day_date == today:
-                            if balance != last_balance:
-                                # _LOGGER.debug(f"day: {day_date} - balance change {balance}")
+                            #load the balances from the prevoius day, if they exist, so we can compare them to the current day  
+                            last_available_balance = 0
+                            last_future_balance = 0
+                            last_balance = 0
+                            for powerpack in self._get_powerpacks((day - timedelta(days=1)).strftime("%Y-%m-%d")):
+                                if datetime.strptime(powerpack["availableFrom"], "%Y-%m-%d").astimezone(ZoneInfo("Pacific/Auckland"))  <= day:
+                                    last_available_balance += powerpack["balance"]
+                                else:
+                                    last_future_balance += powerpack["balance"]
+                                last_balance += powerpack["balance"]
+
+                            # _LOGGER.debug(f"day: {day_date} - balance: {balance} last_balance: {last_balance} last_day: {last_day} available_balance: {available_balance} last_available_balance: {last_available_balance} future_balance: {future_balance} last_future_balance: {last_future_balance}")
+
+                            if round(balance,2) != round(last_balance,2) or round(available_balance,2) != round(last_available_balance,2) or round(future_balance,2) != round(last_future_balance,2):
+                                # _LOGGER.debug(f"day: {day_date} - balance change {balance} from {last_balance} available balance change {available_balance} from {last_available_balance} future balance change {future_balance} from {last_future_balance}")
                                 powerpacks_by_date[day_date] = {
                                     "type": "list",
                                     "powerpacks": powerpacks_purchased
                                 }
-                                last_balance = balance
                                 last_day = day_date
                             else:
                                 # _LOGGER.debug(f"day: {day_date} - no balance change {balance}")
-                                powerpacks_by_date[day_date] = {
-                                    "type": "reference",
-                                    "same_as": last_day
-                                }
-                        else:
-                            last_balance = balance
-                            last_day = day_date
+                                if not last_day:
+                                    #we're processing one day only, check the previous day for a reference
+                                    previous_day = (day - timedelta(days=1)).strftime("%Y-%m-%d")
+                                    if self._stores["powerpacks"].data.get(previous_day, {}).get("type", "") == "list":
+                                        last_day = previous_day
+                                    else:
+                                        last_day = self._stores["powerpacks"].data.get(previous_day, {}).get("same_as", "")
+                                else:
+                                    powerpacks_by_date[day_date] = {
+                                        "type": "reference",
+                                        "same_as": last_day
+                                    }
+                        await self._stores["powerpacks"].async_save({
+                            **self._stores["powerpacks"].data,
+                            **powerpacks_by_date
+                        })
 
-                        
                         day += timedelta(days=1)
-
-                    await self._stores["powerpacks"].async_save({
-                        **self._stores["powerpacks"].data,
-                        **powerpacks_by_date
-                    })
 
                     #force reprocessing of the billing data
                     await self._schedule_usage_process()
@@ -695,7 +722,7 @@ class PowershopCoordinator(
                 day = current_billing_period_start.replace(hour=0, minute=0, second=0)
 
                 previous_day_cost = 0
-                while day <= now:
+                while day <= (now - timedelta(days=1)).replace(hour=23, minute=59, second=59):
                     day_ts = day.strftime("%Y-%m-%d")
                     nominal_cost_current_billing_period_by_day[day_ts] = previous_day_cost + nominal_cost_daily_total.get(day_ts,0)
                     previous_day_cost += nominal_cost_daily_total.get(day_ts,0)
@@ -711,9 +738,14 @@ class PowershopCoordinator(
 
                 day_counter = 1;
                 for day in nominal_cost_current_billing_period_by_day.keys():
-                    effective_cost_ratio_by_day[day], _, _ = self._calculate_effective_cost(day, day_counter, nominal_cost_current_billing_period_by_day[day])
+                    effective_cost_ratio_by_day[day], _, _ = self._calculate_effective_cost(day, day_counter, nominal_cost_current_billing_period_by_day[day], True)
                     day_counter += 1
                 
+                ratio_sum = 0;
+                for day in effective_cost_ratio_by_day.keys():
+                    # _LOGGER.debug(f"day {day} effective cost ratio: {effective_cost_ratio_by_day[day]:.4f}")
+                    ratio_sum += effective_cost_ratio_by_day[day]
+                # _LOGGER.debug(f"average effective cost ratio: {ratio_sum/len(effective_cost_ratio_by_day.keys()):.4f}")
                 #use the previously calculated ratios to adjust the daily historical cost
                 #these timestamps are hourly (unlike the orginal usage ones, which are every 30mins)
                 for ts, value in nominal_cost_sensor_total.items():
@@ -722,12 +754,7 @@ class PowershopCoordinator(
                     record_day = timestamp.strftime("%Y-%m-%d")
                     hourly_charge = self._stores["rates"].data.get(record_month, {}).get("daily_charge", {}).get("rate", 0)/24 
                     if effective_cost_ratio_by_day.get(record_day) is not None and hourly_charge is not None:
-                        if effective_cost_ratio_by_day.get(record_day) != 0:             
-                            effective_cost_sensor_total[timestamp] = (value - hourly_charge) * effective_cost_ratio_by_day.get(record_day) + hourly_charge
-                        else:
-                            #use the ratio from the previous day, if available, otherwise use 1 (no powerpacks used)
-                            previous_day = (timestamp - timedelta(days=1)).strftime("%Y-%m-%d")
-                            effective_cost_sensor_total[timestamp] = (value - hourly_charge) * effective_cost_ratio_by_day.get(previous_day, 1) + hourly_charge     
+                        effective_cost_sensor_total[timestamp] = (value - hourly_charge) * effective_cost_ratio_by_day.get(record_day) + hourly_charge
 
                 current_final_ratio, current_amount_paid, current_powerpacks_used = self._calculate_effective_cost(now.strftime("%Y-%m-%d"), current_billing_period_usage_by_rate["daily_charge"], current_billing_period_cost)
                 if current_final_ratio == 0:
