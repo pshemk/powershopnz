@@ -714,8 +714,9 @@ class PowershopCoordinator(
                 previous_day_cost = 0
                 while day < previous_billing_period_end.replace(hour=23, minute=59, second=59):
                     day_ts = day.strftime("%Y-%m-%d")
-                    nominal_cost_previous_billing_period_by_day[day_ts] = previous_day_cost + nominal_cost_daily_total.get(day_ts,0)
-                    previous_day_cost += nominal_cost_daily_total.get(day_ts,0)
+                    if nominal_cost_daily_total.get(day_ts,0) > 0:
+                        nominal_cost_previous_billing_period_by_day[day_ts] = previous_day_cost + nominal_cost_daily_total.get(day_ts,0)
+                        previous_day_cost += nominal_cost_daily_total.get(day_ts,0)
                     day += timedelta(days=1)
 
                 #calculate the usage starting from the beginning of the current billing period
@@ -724,8 +725,9 @@ class PowershopCoordinator(
                 previous_day_cost = 0
                 while day <= (now - timedelta(days=1)).replace(hour=23, minute=59, second=59):
                     day_ts = day.strftime("%Y-%m-%d")
-                    nominal_cost_current_billing_period_by_day[day_ts] = previous_day_cost + nominal_cost_daily_total.get(day_ts,0)
-                    previous_day_cost += nominal_cost_daily_total.get(day_ts,0)
+                    if nominal_cost_daily_total.get(day_ts,0) > 0:
+                        nominal_cost_current_billing_period_by_day[day_ts] = previous_day_cost + nominal_cost_daily_total.get(day_ts,0)
+                        previous_day_cost += nominal_cost_daily_total.get(day_ts,0)
                     day += timedelta(days=1)
 
                 #using the daily totals - calculate the daily effective rates
