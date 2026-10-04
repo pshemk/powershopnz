@@ -254,6 +254,10 @@ grid_options:
 
 ## Releases
 
+### v1.0.12
+- further improvements to handling of powerpacks during billing cycles switchover
+
+
 ### v1.0.11
 - fixed a bug when in some circumstance the ratio can drop to 0 if there's no data for 2 days.
 
