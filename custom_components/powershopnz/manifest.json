@@ -13,5 +13,5 @@
   "requirements": [
     "homeassistant-historical-sensor@git+https://github.com/pshemk/ha-historical-sensor.git@aae6a0e1428e83da21dc1a7d9e87354016aebcec"
   ],
-  "version": "1.0.12"
+  "version": "1.0.13"
 }
