@@ -287,7 +287,7 @@ class PowershopCoordinator(
             if powerpack['balance'] <= 0:
                 continue
             offset = min(powerpack['balance'], total_cost)
-            powerpacks_used += f"{powerpack["name"]} offsets ${offset:.2f} (ratio: {powerpack["ratio"]:.2f})\n"
+            powerpacks_used += f"{powerpack["name"]} covers ${offset:.2f} (ratio: {powerpack["ratio"]:.2f})\n"
 
             total_cost -= offset
             amount_paid += offset * powerpack["ratio"]
@@ -758,7 +758,7 @@ class PowershopCoordinator(
                     if effective_cost_ratio_by_day.get(record_day) is not None and hourly_charge is not None:
                         effective_cost_sensor_total[timestamp] = (value - hourly_charge) * effective_cost_ratio_by_day.get(record_day) + hourly_charge
 
-                current_final_ratio, current_amount_paid, current_powerpacks_used = self._calculate_effective_cost(now.strftime("%Y-%m-%d"), current_billing_period_usage_by_rate["daily_charge"], current_billing_period_cost)
+                current_final_ratio, current_amount_paid, current_powerpacks_used = self._calculate_effective_cost(now.strftime("%Y-%m-%d"), current_billing_period_usage_by_rate["daily_charge"], current_billing_period_cost, True)
                 if current_final_ratio == 0:
                     #use the previous days ratio if available, otherwise use 1 (no powerpacks used)
                     previous_day = (now - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -842,8 +842,10 @@ class PowershopCoordinator(
 
         for timestamp, value in historical_data.items():
             current_timestamp = self._any_to_timestamp(timestamp)
-            if current_timestamp < start_timestamp:
-                continue
+
+            #For now supply all the data and let the historical sensor filter it
+            # if current_timestamp < start_timestamp:
+            #     continue
 
             historical_data_filtered[current_timestamp.timestamp()] = value
 
