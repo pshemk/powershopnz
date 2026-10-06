@@ -1,5 +1,9 @@
 ## Releases
 
+
+### v1.0.14
+- fixed a bug where in some circumstances the billing dates would show as 'unknown' 
+
 ### v1.0.13
 - use historical sensor to do all the filtering of data during the updates
 - documentation updates
