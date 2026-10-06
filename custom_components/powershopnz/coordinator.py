@@ -485,7 +485,7 @@ class PowershopCoordinator(
                 }, 
                 "daily_charge": self._stores["rates"].data.get(month).get("daily_charge").get("rate"),
                 **self._stores["powerpacks_balances"].data,
-                **{ f"current_{key}": value for key, value in self._str_to_timestamp(self._stores["billing_dates"].data.get("current", {}).get("datetime")).items() },
+                **{ f"current_{key}": self._any_to_timestamp(value) for key, value in self._stores["billing_dates"].data.get("current", {}).get("datetime").items() },
                 "nominal_unit_cost": current_rate,
                 "unit_rate_type": timeslot.replace("_", " ").title(),
                 "effective_unit_cost": effective_current_rate,
