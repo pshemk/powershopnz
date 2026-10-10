@@ -121,11 +121,12 @@ class PowershopCoordinator(
             self._schedule_usage_fetch,
         )        
 
-        #run first usage processing here, once HA is up
-        async_at_started(
-            self.hass,
-            self._schedule_usage_process,
-        )        
+        # not needed, refreshing of powerpacks always triggers a reprocessing of the usage data
+        # #run first usage processing here, once HA is up
+        # async_at_started(
+        #     self.hass,
+        #     self._schedule_usage_process,
+        # )        
 
         #run data expiry, once HA is up
         async_at_started(
@@ -430,17 +431,19 @@ class PowershopCoordinator(
                             else:
                                 # _LOGGER.debug(f"day: {day_date} - no balance change {balance}")
                                 if not last_day:
+                                    # _LOGGER.debug(f"no last_day found")
                                     #we're processing one day only, check the previous day for a reference
                                     previous_day = (day - timedelta(days=1)).strftime("%Y-%m-%d")
                                     if self._stores["powerpacks"].data.get(previous_day, {}).get("type", "") == "list":
                                         last_day = previous_day
                                     else:
-                                        last_day = self._stores["powerpacks"].data.get(previous_day, {}).get("same_as", "")
-                                else:
-                                    powerpacks_by_date[day_date] = {
-                                        "type": "reference",
-                                        "same_as": last_day
-                                    }
+                                        # _LOGGER.debug(f"last_day found")
+                                        last_day = self._stores["powerpacks"].data.get(previous_day, {}).get("same_as", "")                                
+                                powerpacks_by_date[day_date] = {
+                                    "type": "reference",
+                                    "same_as": last_day
+                                }
+                                
                         await self._stores["powerpacks"].async_save({
                             **self._stores["powerpacks"].data,
                             **powerpacks_by_date
@@ -449,6 +452,7 @@ class PowershopCoordinator(
                         day += timedelta(days=1)
 
                     #force reprocessing of the billing data
+                    # _LOGGER.debug("Powerpacks updated, scheduling usage processing")
                     await self._schedule_usage_process()
                                     
                 # Store refresh_token if needed
@@ -530,6 +534,7 @@ class PowershopCoordinator(
                     **self._stores["state"].data,
                     "last_usage_date": usage["last_usage_date"]
                 })
+                # _LOGGER.debug("Full data downloaded, scheduling usage processing")
                 await self._schedule_usage_process()
             else:
                 #only fetch new data (4 days earlier than last recorded, to allow for filling in the gaps)
@@ -545,7 +550,9 @@ class PowershopCoordinator(
                         })
 
                     #check if we actually got any new data
+                    # _LOGGER.debug(f"last_usage_date: {self._stores['state'].data.get('last_usage_date')} new last_usage_date: {usage['last_usage_date']}")
                     if usage["last_usage_date"] != self._stores["state"].data.get("last_usage_date"):
+                        # _LOGGER.debug("Updated usage data, scheduling usage processing")
                         await self._schedule_usage_process()
 
                         await self._stores["state"].async_save({
