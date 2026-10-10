@@ -1,5 +1,7 @@
 ## Releases
 
+### v1.0.15
+-  schedule processing only when new data arrives 
 
 ### v1.0.14
 - fixed a bug where in some circumstances the billing dates would show as 'unknown' 
