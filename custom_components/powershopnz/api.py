@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import logging
+import socket
 from typing import Any, TypedDict, cast
 import uuid
 from zoneinfo import ZoneInfo
@@ -371,60 +373,101 @@ class PowershopApiClient:
 
     async def _get_tokens_from_custom_token(self, custom_token: str) -> TokenResult:
 
-        session: aiohttp.ClientSession = await self._connect()
-        async with session.post(
-            f"{FIREBASE_SIGN_IN_URL}?key={FIREBASE_API_KEY}",
-            json={"token": custom_token, "returnSecureToken": True},
-        ) as resp:
-            data: dict[str, Any] = await resp.json()
-            if not resp.ok:
-                raise AuthError(f"Can't get new id token: {data}")
-            id_token = data["idToken"]
-            refresh_token = data["refreshToken"]
-            expires_in = int(data.get("expiresIn", 3600))
+        attempts = 5
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                session: aiohttp.ClientSession = await self._connect()
+                async with session.post(
+                    f"{FIREBASE_SIGN_IN_URL}?key={FIREBASE_API_KEY}",
+                    json={"token": custom_token, "returnSecureToken": True},
+                ) as resp:
+                    data: dict[str, Any] = await resp.json()
+                    if not resp.ok:
+                        raise AuthError(f"Can't get new id token: {data}")
+                    id_token = data["idToken"]
+                    refresh_token = data["refreshToken"]
+                    expires_in = int(data.get("expiresIn", 3600))
 
-        self._id_token = id_token
-        self.refresh_token = refresh_token
-        self._id_token_expiry = datetime.now(UTC) + timedelta(seconds=expires_in - 60)
-        _LOGGER.debug("Received a new ID token")
-        return {"id_token": id_token, "refresh_token": refresh_token}
-
+                self._id_token = id_token
+                self.refresh_token = refresh_token
+                self._id_token_expiry = datetime.now(UTC) + timedelta(seconds=expires_in - 60)
+                _LOGGER.debug("Received a new ID token")
+                return {"id_token": id_token, "refresh_token": refresh_token}
+            except:
+                if attempt == attempts:
+                    _LOGGER.error(
+                        "Getting tokens failed  after %s attempts", attempts
+                    )
+                    raise TimeoutError(
+                        f"Getting tokens failed after {attempts} attempts"
+                    ) from err
+                _LOGGER.warning(
+                    "Getting tokens failed (attempt %s/%s); retrying in 3 seconds",
+                    attempt,
+                    attempts,
+                )
+                await asyncio.sleep(3)
+                
     async def _refresh_id_token(self) -> None:
+
         if not self.refresh_token:
             raise AuthError("No refresh token")
         
-        session: aiohttp.ClientSession = await self._connect()
-        
-        async with session.post(
-                f"{FIREBASE_REFRESH_URL}?key={FIREBASE_API_KEY}",
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": self.refresh_token,
-                },
-                headers={
-                    "content-type": "application/x-www-form-urlencoded",
-                },        
-            ) as resp:
-            data: dict[str, Any] = await resp.json()
-            if not resp.ok:
-                error: dict[str, Any] = data.get("error", {})
-                error_code: str | None = error.get("message")
+        attempts = 5
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
 
-                if error_code in (
-                    "TOKEN_EXPIRED",
-                    "INVALID_REFRESH_TOKEN",
-                ):
-                    raise RefreshTokenInvalidError(
-                        f"Refresh token rejected: {data}"
-                    )
-
-                raise AuthError(f"Token refresh failed: {data}")
+                session: aiohttp.ClientSession = await self._connect()
                 
-            self._id_token = data["id_token"]
-            self.refresh_token = data["refresh_token"]
-            expires_in = int(data.get("expires_in", 3600))
-            self._id_token_expiry = datetime.now(UTC) + timedelta(seconds=expires_in - 60)
-            _LOGGER.debug("Refreshed ID token")
+                async with session.post(
+                        f"{FIREBASE_REFRESH_URL}?key={FIREBASE_API_KEY}",
+                        data={
+                            "grant_type": "refresh_token",
+                            "refresh_token": self.refresh_token,
+                        },
+                        headers={
+                            "content-type": "application/x-www-form-urlencoded",
+                        },        
+                    ) as resp:
+                    data: dict[str, Any] = await resp.json()
+                    if not resp.ok:
+                        error: dict[str, Any] = data.get("error", {})
+                        error_code: str | None = error.get("message")
+
+                        if error_code in (
+                            "TOKEN_EXPIRED",
+                            "INVALID_REFRESH_TOKEN",
+                        ):
+                            raise RefreshTokenInvalidError(
+                                f"Refresh token rejected: {data}"
+                            )
+
+                        raise AuthError(f"Token refresh failed: {data}")
+                        
+                    self._id_token = data["id_token"]
+                    self.refresh_token = data["refresh_token"]
+                    expires_in = int(data.get("expires_in", 3600))
+                    self._id_token_expiry = datetime.now(UTC) + timedelta(seconds=expires_in - 60)
+                    _LOGGER.debug("Refreshed ID token")
+                    return
+            except:
+                if attempt == attempts:
+                    _LOGGER.error(
+                        "Refresh id token failed after %s attempts", attempts
+                    )
+                    raise TimeoutError(
+                        f"Refresh id token failed after {attempts} attempts"
+                    ) from err
+                _LOGGER.warning(
+                    "Refresh id token failed (attempt %s/%s); retrying in 3 seconds",
+                    attempt,
+                    attempts,
+                )
+                await asyncio.sleep(3)
 
     async def _get_current_token(self) -> str:
         if (
@@ -441,51 +484,90 @@ class PowershopApiClient:
     async def send_otp(self, email: str) -> str:
 
         journey_id = str(uuid.uuid4())
-        session: aiohttp.ClientSession = await self._connect()
-        payload: dict[str, str | bool] = {
-            "email": email,
-            "brand": "powershop",
-            "redirectUrl": "https://app.powershop.nz",
-            "journeyId": journey_id,
-            "otpEnabled": True,
-        }
-        async with session.post(
-            EMAIL_CONNECTOR_URL,
-            json=payload,
-            headers={"content-type": "application/json", "X-Client-Platform": "web"},
-        ) as resp:
-            if resp.status == 404:
-                raise AuthError("Powershop account not found")
-            if not resp.ok:
-                raise AuthError(f"Failed to send OTP: HTTP {resp.status}")
-        return journey_id
+        attempts = 5
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                session: aiohttp.ClientSession = await self._connect()
+                payload: dict[str, str | bool] = {
+                    "email": email,
+                    "brand": "powershop",
+                    "redirectUrl": "https://app.powershop.nz",
+                    "journeyId": journey_id,
+                    "otpEnabled": True,
+                }
+                async with session.post(
+                    EMAIL_CONNECTOR_URL,
+                    json=payload,
+                    headers={"content-type": "application/json", "X-Client-Platform": "web"},
+                ) as resp:
+                    if resp.status == 404:
+                        raise AuthError("Powershop account not found")
+                    if not resp.ok:
+                        raise AuthError(f"Failed to send OTP: HTTP {resp.status}")
+                return journey_id
+            except:
+                if attempt == attempts:
+                    _LOGGER.error(
+                        "OTP send failed after %s attempts", attempts
+                    )
+                    raise TimeoutError(
+                        f"OTP send failed after {attempts} attempts"
+                    ) from err
+                _LOGGER.warning(
+                    "OTP send failed(attempt %s/%s); retrying in 3 seconds",
+                    attempt,
+                    attempts,
+                )
+                await asyncio.sleep(3)
+
 
     async def verify_otp(self, email: str, otp: str, journey_id: str) -> TokenResult:
 
         _LOGGER.debug("verify otp start")
-        session: aiohttp.ClientSession = await self._connect()
-        payload: dict[str, str] = {
-            "email": email,
-            "otp": otp,
-            "brand": "powershop",
-            "journeyId": journey_id,
-        }
-        async with session.post(
-            OTP_VALIDATOR_URL,
-            json=payload,
-            headers={"content-type": "application/json", "X-Client-Platform": "web"},
-        ) as resp:
-            data: dict[str, Any] = await resp.json()
-            if not resp.ok:
-                _LOGGER.debug("OTP Failed")
-                raise OTPError(data.get("error", "OTP verification failed"))
-            custom_token: str | None = data.get("customToken")
-            if not custom_token:
-                _LOGGER.debug("no OTP token returned")
-                raise OTPError("No custom token returned by OTP validator")
+        attempts = 5
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                session: aiohttp.ClientSession = await self._connect()
+                payload: dict[str, str] = {
+                    "email": email,
+                    "otp": otp,
+                    "brand": "powershop",
+                    "journeyId": journey_id,
+                }
+                async with session.post(
+                    OTP_VALIDATOR_URL,
+                    json=payload,
+                    headers={"content-type": "application/json", "X-Client-Platform": "web"},
+                ) as resp:
+                    data: dict[str, Any] = await resp.json()
+                    if not resp.ok:
+                        _LOGGER.debug("OTP Failed")
+                        raise OTPError(data.get("error", "OTP verification failed"))
+                    custom_token: str | None = data.get("customToken")
+                    if not custom_token:
+                        _LOGGER.debug("no OTP token returned")
+                        raise OTPError("No custom token returned by OTP validator")
 
-        _LOGGER.debug("OTP token returned ok")
-        return await self._get_tokens_from_custom_token(custom_token)
+                _LOGGER.debug("OTP token returned ok")
+                return await self._get_tokens_from_custom_token(custom_token)
+            except:
+                if attempt == attempts:
+                    _LOGGER.error(
+                        "OTP validation failed after %s attempts", attempts
+                    )
+                    raise TimeoutError(
+                        f"OTP validation failed after {attempts} attempts"
+                    ) from err
+                _LOGGER.warning(
+                    "OTP validation failed (attempt %s/%s); retrying in 3 seconds",
+                    attempt,
+                    attempts,
+                )
+                await asyncio.sleep(3)
 
 
     def _billing_day_start(self, timestamp: str | None) -> str | None:
@@ -509,31 +591,49 @@ class PowershopApiClient:
         self, query: str, variables: dict[str, Any] | None = None
     ) -> dict[str, Any]:
 
-        id_token: str = await self._get_current_token()
-        session: aiohttp.ClientSession = await self._connect()
         payload: dict[str, Any] = {"query": query}
         if variables:
             payload["variables"] = variables
         # _LOGGER.debug(f"payload: \n {payload}")
-        async with session.post(
-            API_URL,
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {id_token}",
-                "content-type": "application/json",
-            },
-        ) as resp:
-            body: str = await resp.text()
-            if not resp.ok:
-                _LOGGER.error(f"GraphQL {resp.status}:  {body}" )
-                raise ValueError(f"GraphQL HTTP {resp.status}: {body[:500]}")
-            data: dict[str, Any] = await resp.json(content_type=None)
-        if "errors" in data:
-            _LOGGER.warning("GraphQL errors: %s", data["errors"])
-            raise ValueError(data["errors"][0].get("message", "GraphQL error"))
-        # _LOGGER.debug(f"GraphQL data: {body}")            
-        return cast(dict[str, Any], data.get("data", {}))
-
+        attempts = 5
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                id_token: str = await self._get_current_token()
+                session: aiohttp.ClientSession = await self._connect()
+                async with session.post(
+                    API_URL,
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {id_token}",
+                        "content-type": "application/json",
+                    },
+                ) as resp:
+                    body: str = await resp.text()
+                    if not resp.ok:
+                        _LOGGER.error(f"GraphQL {resp.status}:  {body}" )
+                        raise ValueError(f"GraphQL HTTP {resp.status}: {body[:500]}")
+                    data: dict[str, Any] = await resp.json(content_type=None)
+                if "errors" in data:
+                    _LOGGER.warning("GraphQL errors: %s", data["errors"])
+                    raise ValueError(data["errors"][0].get("message", "GraphQL error"))
+                # _LOGGER.debug(f"GraphQL data: {body}")
+                return cast(dict[str, Any], data.get("data", {}))
+            except:
+                if attempt == attempts:
+                    _LOGGER.error(
+                        "GraphQL error after %s attempts", attempts
+                    )
+                    raise TimeoutError(
+                        f"GraphQL error after {attempts} attempts"
+                    ) from err
+                _LOGGER.warning(
+                    "GraphQL error (attempt %s/%s); retrying in 3 seconds",
+                    attempt,
+                    attempts,
+                )
+                await asyncio.sleep(3)
 
     async def get_properties(self) -> list[PropertyInfo]:
         accounts: dict[str, Any] = await self._run_query(
