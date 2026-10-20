@@ -32,6 +32,11 @@ Past power usage and costs are available to Home Assistant as statistics. That m
 
 Sensor groups can be disabled via the options menu if not needed. 
 
+
+### Uses Powershop authentication
+
+This integartion uses the Powershop authentication mechanism, with the OTP codes send to your email address, making it very easy to deploy.
+
 ## Installation process
 
 This integration can be installed using HACS custom integration:
@@ -102,7 +107,7 @@ The following sensors provide additional information through attributes:
 
 These calulcations are done entirely in the integration (i.e. the API doesn't provide anything discounted pricing information beyond the purchased powerpacks). Each powerpack has an inherit discount rate (for example if you purchased it for $10 but it covers $20 of power the rate is 0.5). The "Staying Power" are generally 0.75 to 0.8 and the future packs are around 0.9 (those rates can be seen in the attribures of the "Powerpacks" sensors). The special powerpacks vary wildly, sometimes as low as 0.5. 
 
-When another day of usage data for the biling period is made available the intgration identifies the powerpacks that offer the best rates and calculates the total amount of money spent on those powerpacks. Than, the daily charge for that period is substracted (using nominal rates) resulting in total amount of money spent on energy alone. A calculation is also done for the nominal power rates over the same period of time.  Than the powerpack usage costs are divided by the nominal usage costs. The result is stored in the `Effective cost ratio` sensor. For each new day the whole calculation is repeated (each time usage data is taken from the start of the billing period). That effective cost ratio is than used to calculate various "effective" rates. All those rates are indicative only, as they're only valid for that one day. Only the last day of the billing cycle offers a true insight into the discounts. 
+When another day of usage data for the biling period is made available the intgration identifies the powerpacks that offer the best rates and calculates the total amount of money spent on those powerpacks. Then, the daily charge for that period is substracted (using nominal rates) resulting in total amount of money spent on energy alone. A calculation is also done for the nominal power rates over the same period of time.  Than the powerpack usage costs are divided by the nominal usage costs. The result is stored in the `Effective cost ratio` sensor. For each new day the whole calculation is repeated (each time usage data is taken from the start of the billing period). That effective cost ratio is than used to calculate various "effective" rates. All those rates are indicative only, as they're only valid for that one day. Only the last day of the billing cycle offers a true insight into the discounts. 
 
 
 ## Notes
@@ -115,7 +120,7 @@ The effective cost ratio is calculated only using the costs of units (kWh) of en
 
 All costs are calculated in the integration, so there might be some small differences when it comes to nominal costs due to rounding. It's done this way because downloading both costs and usage seems to be much slower than downloading the usage alone; also, calculating the costs in the integration makes it easier to calculate the effective costs. 
 
-The historical data is always with 1h resolution, but due to the way it's loaded (using the historical sensor) it don't behave exactly the same way regular sensors do. The most important difference is that they never have the current value, hence they can only be used for statistical purposes.  Please have a look at the examples. 
+The historical data is always with 1h resolution, but due to the way it's loaded (using the historical sensor) it doesn't behave exactly the same way regular sensors do. The most important difference is that they never have the current value, hence they can only be used for statistical purposes.  Please have a look at the examples. 
 
 The billing period always rolls over into the next one before all data is available (powerpacks are "consumed" on the last day of the billing cycle when there's still no usage information for the last day). The billing period data then become available in the 'Previous billing' sensors. 
 
