@@ -93,9 +93,9 @@ The `Coordinator` is responsible for the initialisation of the integration. It s
 46|sensor:powershopnz_historical_usage_weekday_off_peak|Power usage Weekday Off Peak Statistics
 47|sensor:powershopnz_historical_usage_all_weekend_off_peak|Power usage All Weekend Off Peak Statistics
 54|sensor:powershopnz_historical_nominal_cost_total|Nominal power cost Statistics
-55|sensor:powershopnz_historical_nominal_cost_weekday_off_peak|Nominal poower cost Weekday Off Peak Statistics
-56|sensor:powershopnz_historical_nominal_cost_all_weekend_off_peak|Nominal poower cost All Weekend Off Peak Statistics
-57|sensor:powershopnz_historical_nominal_cost_weekday_peak|Nominal poower cost Weekday Peak Statistics
+55|sensor:powershopnz_historical_nominal_cost_weekday_off_peak|Nominal power cost Weekday Off Peak Statistics
+56|sensor:powershopnz_historical_nominal_cost_all_weekend_off_peak|Nominal power cost All Weekend Off Peak Statistics
+57|sensor:powershopnz_historical_nominal_cost_weekday_peak|Nominal power cost Weekday Peak Statistics
 58|sensor:powershopnz_historical_effective_cost_total|Effective power cost Statistics
 ```
 

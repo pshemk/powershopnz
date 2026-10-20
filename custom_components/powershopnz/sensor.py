@@ -282,7 +282,7 @@ SENSORS_HISTORICAL_PER_RATE = [
     ),
     SensorEntityDescription(
         key='historical_nominal_cost',
-        name='Nominal poower cost',
+        name='Nominal power cost',
         native_unit_of_measurement=CURRENCY_DOLLAR,
         # device_class=SensorDeviceClass.MEASUREMENT,
         state_class=SensorStateClass.TOTAL,
