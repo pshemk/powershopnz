@@ -1,5 +1,8 @@
 ## Releases
 
+### v1.0.17
+-  correct a few typos in sensor names 
+
 ### v1.0.16
 -  automatically retry all queries when they fail. This should greatly reduce the number of times values turn 'unknown'
 
