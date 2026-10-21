@@ -1,5 +1,8 @@
 ## Releases
 
+### v1.0.18
+-  make rates checking a bit more robust
+
 ### v1.0.17
 -  correct a few typos in sensor names 
 
