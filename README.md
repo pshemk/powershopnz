@@ -81,7 +81,10 @@ The integration provides the following regular sensors. All entities are in the 
 | Previous billing period cost: Effective Total |  `powershopnz_previous_billing_period_`<br>`cost_total_effective` | The cost of electricity in previous billing period including powerpacks discounts | NZD | 10 mins | 
 | Previous billing period cost: Nominal Total | `powershopnz_previous_billing_period_`<br>`cost_total_nominal` | The cost of electricity in previous billing period using nominal pricing | NZD | 10 mins | 
 | Previous billing period usage: Total | `powershopnz_previous_billing_period`<br>`_usage_total` | Total power usage in the previous billing period | kWh | 10 mins | 
-
+| Current billing period nominal spend | `powershopnz_billing_period`<br>`_spend_nominal` | The nominal amount of money spent this billing period on powerpacks | NZD | 10 mins |
+| Current billing period effective spend | `powershopnz_billing_period`<br>`_spend_effective` | The effective (actual) amount of money spent this billing period on powerpacks | NZD | 10 mins |
+| Previous billing period nominal spend | `powershopnz_billing_period`<br>`_spend_nominal` | The nominal amount of money spent during the previous billing period on powerpacks | NZD | 10 mins |
+| Previous billing period effective spend | `powershopnz_billing_period`<br>`_spend_effective` | The effective (actual) amount of money spent during the previous  billing period on powerpacks | NZD | 10 mins |
 
 In addition to the sensors above the following sensors are also created. They are used to store the historical values based on usage pulled using the API. Since the API doesn't return current (or up to date) values these sensors always report their values as `unknown`, but they provide all the statistical values and can be used for graphing (or in the energy dashboard). The resolution of each sensor is 1h. Technically they only exist to provide placeholders for the long-term statistics.
 
@@ -102,6 +105,8 @@ The following sensors provide additional information through attributes:
 | Billing period cost: Effective Total | `powerpacks` | List of powerpacks that will be used to achieve the effective cost |
 | Powerpacks: available balance | `powerpacks`| List of available powerpacks |
 | Powerpacks: future balance | `powerpacks` | List of powerpacks that will be available in future | 
+| Current billing period effective spend | `powerpacks` | List of powerpacks purchased durinng the current billing period | 
+| Previous billing period effective spend | `powerpacks` | List of powerpacks purchased durinng the previous billing period | 
 
 ## Calculations of the effective rates
 

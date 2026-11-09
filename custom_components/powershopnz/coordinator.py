@@ -571,6 +571,15 @@ class PowershopCoordinator(
     async def _async_process_usage(self) -> None:
         """Process usage data in the background."""
 
+        current_nominal_spend = 0
+        current_effective_spend = 0
+        current_spend_powerpacks = ""
+        previous_nominal_spend = 0
+        previous_effective_spend = 0
+        previous_spend_powerpacks = ""
+        seen_powerpacks = []
+
+
         try:
             _LOGGER.debug("Data to process")
             _LOGGER.debug(
@@ -716,6 +725,7 @@ class PowershopCoordinator(
                             previous_billing_period_cost += unit_cost * value + daily_charge / 48
 
                 #calculate the incremental cost starting from the beginning of the previous billing period
+                #also sum up the spend from the beginning of the previous billing period
                 day = previous_billing_period_start.replace(hour=0, minute=0, second=0)
 
                 previous_day_cost = 0
@@ -724,17 +734,46 @@ class PowershopCoordinator(
                     if nominal_cost_daily_total.get(day_ts,0) > 0:
                         nominal_cost_previous_billing_period_by_day[day_ts] = previous_day_cost + nominal_cost_daily_total.get(day_ts,0)
                         previous_day_cost += nominal_cost_daily_total.get(day_ts,0)
+
+                    #check if any new powerpacks appeared in the list
+                    for powerpack in self._get_powerpacks(day_ts):
+                        if (
+                            datetime.fromisoformat(powerpack["purchasedAt"])  >= previous_billing_period_start 
+                            and datetime.fromisoformat(powerpack["purchasedAt"]) < previous_billing_period_end
+                            and not powerpack["id"] in seen_powerpacks
+                        ):
+                            _LOGGER.debug("powerpack: %s purchased at %s is in previous billing period", powerpack["name"], powerpack["purchasedAt"])
+                            previous_effective_spend += powerpack["balance"] * powerpack["ratio"]
+                            previous_nominal_spend += powerpack["balance"]
+                            previous_spend_powerpacks += f"{datetime.fromisoformat(powerpack["purchasedAt"]).strftime('%Y-%m-%d')} {powerpack['name']} (${powerpack['balance']:.2f})\n"
+                            seen_powerpacks.append(powerpack["id"])
                     day += timedelta(days=1)
 
                 #calculate the usage starting from the beginning of the current billing period
+                #also sum up the spend from the beginning of the current billing period
                 day = current_billing_period_start.replace(hour=0, minute=0, second=0)
+                seen_powerpacks = []
 
                 previous_day_cost = 0
-                while day <= (now - timedelta(days=1)).replace(hour=23, minute=59, second=59):
+                while day <= (now.replace(hour=23, minute=59, second=59)):
                     day_ts = day.strftime("%Y-%m-%d")
                     if nominal_cost_daily_total.get(day_ts,0) > 0:
                         nominal_cost_current_billing_period_by_day[day_ts] = previous_day_cost + nominal_cost_daily_total.get(day_ts,0)
                         previous_day_cost += nominal_cost_daily_total.get(day_ts,0)
+
+                    #check if any new powerpacks appeared in the list
+                    for powerpack in self._get_powerpacks(day_ts):
+                        if (
+                            datetime.fromisoformat(powerpack["purchasedAt"])  >= current_billing_period_start 
+                            and datetime.fromisoformat(powerpack["purchasedAt"]) < current_billing_period_end
+                            and not powerpack["id"] in seen_powerpacks
+                        ):
+                            _LOGGER.debug("powerpack: %s purchased at %s is in current billing period", powerpack["name"], powerpack["purchasedAt"])
+                            current_spend_powerpacks += f"{datetime.fromisoformat(powerpack['purchasedAt']).strftime('%Y-%m-%d')} {powerpack['name']} (${powerpack['balance']:.2f})\n"
+                            current_effective_spend += powerpack["balance"] * powerpack["ratio"]
+                            current_nominal_spend += powerpack["balance"]
+                            seen_powerpacks.append(powerpack["id"])
+
                     day += timedelta(days=1)
 
                 #using the daily totals - calculate the daily effective rates
@@ -806,10 +845,20 @@ class PowershopCoordinator(
                         **{f"effective_unit_cost_{key}": value.get("rate") * current_final_ratio
                                     for key, value in self._stores["rates"].data.get(now.strftime("%m"), {}).items() if key != 'daily_charge'},
                         'effective_cost_ratio': current_final_ratio,
+                        "billing_period_spend_effective": current_effective_spend,
+                        "billing_period_spend_nominal": current_nominal_spend,
+                        "previous_billing_period_spend_effective": previous_effective_spend,
+                        "previous_billing_period_spend_nominal": previous_nominal_spend,
                     },
                     'attributes':{
                         'billing_period_cost_total_effective': { 
                             "powerpacks": current_powerpacks_used 
+                        },
+                        'billing_period_spend_effective': { 
+                            "powerpacks": current_spend_powerpacks 
+                        },
+                        'previous_billing_period_spend_effective': { 
+                            "powerpacks": previous_spend_powerpacks
                         }
                     }
                 })
