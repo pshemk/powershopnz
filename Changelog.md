@@ -1,5 +1,8 @@
 ## Releases
 
+### v1.0.19
+-  add effective/actual and nominal spend sensors for both current and previous billing periods
+
 ### v1.0.18
 -  make rates checking a bit more robust
 
