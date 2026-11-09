@@ -755,7 +755,7 @@ class PowershopCoordinator(
                 seen_powerpacks = []
 
                 previous_day_cost = 0
-                while day <= (now - timedelta(days=1)).replace(hour=23, minute=59, second=59):
+                while day <= (now.replace(hour=23, minute=59, second=59)):
                     day_ts = day.strftime("%Y-%m-%d")
                     if nominal_cost_daily_total.get(day_ts,0) > 0:
                         nominal_cost_current_billing_period_by_day[day_ts] = previous_day_cost + nominal_cost_daily_total.get(day_ts,0)
