@@ -39,19 +39,16 @@ This integartion uses the Powershop authentication mechanism, with the OTP codes
 
 ## Installation process
 
-This integration can be installed using HACS custom integration:
+This integration can be installed using the Home Assistant Marketplace:
 
-1. Open HACS 
-2. In the top-right corner click the three dots menu and select "Custom repository"
-3. In the Repository field paste `https://github.com/pshemk/powershopnz`
-4. In the Type field select "Integration" 
-5. Click "Add"
-6. Once the integration is added, go to Home Assistant "Settings" -> "Devices & Services" 
-7. Click "Add Integration" at the bottom right
-8. Search for "Powershop NZ" in the window that appears and click it
-9. Follow the prompts of the installation process
-
-The icon currently doesn't work in HACS, due to a bug in HACS. 
+1. In Home Assistant navigate: Settings -> Marketplace
+2. In the top-right corner click the "Add from link" button
+3. In the GitHub field paste `https://github.com/pshemk/powershopnz`
+4. Click "Add"
+5. Once the integration is added, go to Home Assistant "Settings" -> "Devices & Services" 
+6. Click "Add Integration" at the bottom right
+7. Search for "Powershop NZ" in the window that appears and click it
+8. Follow the prompts of the installation process
 
 <!-- [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=pshemk&repository=https%3A%2F%2Fgithub.com%2Fpshemk%2Fpowershopnz&category=Integration) -->
 
