@@ -1,5 +1,8 @@
 ## Releases
 
+### v1.0.20
+- don't crash when the API fails to return actuall end billing date
+
 ### v1.0.19
 -  add effective/actual and nominal spend sensors for both current and previous billing periods
 
