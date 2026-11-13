@@ -348,7 +348,9 @@ class PowershopCoordinator(
                 await self._stores["powerpacks_balances"].async_save(powerpacks_balances)
 
                 #if this is a new day - fetch the rates (and schedules just to be safe) as well
-                if not self._stores["rates"].data or self._stores["state"].data.get("last_rates_refresh") != today:
+                if ( not self._stores["rates"].data or self._stores["state"].data.get("last_rates_refresh") != today
+                    or not self._stores["rates_schedule"].data or not self._stores["billing_dates"].data
+                ):
                     refresh_rates = True
 
                 if refresh_rates:

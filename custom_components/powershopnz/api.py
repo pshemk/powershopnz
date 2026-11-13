@@ -889,15 +889,25 @@ class PowershopApiClient:
             QUERY_BILLING_DATES, {"accountNumber": account_id}
         )        
 
+        _LOGGER.debug(f"billing_dates_data: {billing_dates_data}")
+
         account = billing_dates_data.get("account") or {}
         billing_options = account.get("billingOptions") or {}
         next_billing_date: str = billing_options.get("nextBillingDate", "1970-01-01")
         billing_period_start_date: str = billing_options.get("currentBillingPeriodStartDate", "1970-01-01")
         billing_period_end_date: str = billing_options.get("currentBillingPeriodEndDate", "1970-01-01")
         current_start = self._parse_billing_date(billing_period_start_date)
-        current_end = self._parse_billing_date(
-            billing_period_end_date, end_of_day=True
-        )
+        
+        current_end: datetime
+
+        if billing_period_end_date is None:
+            current_end = self._parse_billing_date(next_billing_date, end_of_day=True) - relativedelta(days=1)
+            billing_period_end_date = current_end.strftime("%Y-%m-%d")
+        else:  
+            current_end = self._parse_billing_date(
+                billing_period_end_date, end_of_day=True
+            )
+        _LOGGER.debug(f"current_start: {current_start}, current_end: {current_end}")
         previous_start = current_start - relativedelta(months=1)
         previous_end = current_end - relativedelta(months=1)
         return {
