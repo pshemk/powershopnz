@@ -546,21 +546,25 @@ class PowershopCoordinator(
                     self._account_id, self._property_id, last_usage_date
                 )
                 if usage["usage"]:
-                    await self._stores["usage"].async_save({
-                        **self._stores["usage"].data,
-                        **usage["usage"],
-                        })
+                    #protect against incomplete data being returned, we always should have either 4 or 5 days of data, with 48 records per day
+                    if len(usage["usage"]) != 48 * 4 and len(usage["usage"]) != 48 * 5:
+                        _LOGGER.warning("Unexpected number of usage records received: %d", len(usage["usage"]))
+                    else:
+                        await self._stores["usage"].async_save({
+                            **self._stores["usage"].data,
+                            **usage["usage"],
+                            })
 
-                    #check if we actually got any new data
-                    # _LOGGER.debug(f"last_usage_date: {self._stores['state'].data.get('last_usage_date')} new last_usage_date: {usage['last_usage_date']}")
-                    if usage["last_usage_date"] != self._stores["state"].data.get("last_usage_date"):
-                        # _LOGGER.debug("Updated usage data, scheduling usage processing")
-                        await self._schedule_usage_process()
+                        #check if we actually got any new data
+                        # _LOGGER.debug(f"last_usage_date: {self._stores['state'].data.get('last_usage_date')} new last_usage_date: {usage['last_usage_date']}")
+                        if usage["last_usage_date"] != self._stores["state"].data.get("last_usage_date"):
+                            # _LOGGER.debug("Updated usage data, scheduling usage processing")
+                            await self._schedule_usage_process()
 
-                        await self._stores["state"].async_save({
-                            **self._stores["state"].data,
-                            "last_usage_date": usage["last_usage_date"]
-                        })
+                            await self._stores["state"].async_save({
+                                **self._stores["state"].data,
+                                "last_usage_date": usage["last_usage_date"]
+                            })
             _LOGGER.debug("Usage synchronised")
 
         except asyncio.CancelledError:
