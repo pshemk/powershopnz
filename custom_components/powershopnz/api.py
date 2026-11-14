@@ -896,12 +896,12 @@ class PowershopApiClient:
         next_billing_date: str = billing_options.get("nextBillingDate", "1970-01-01")
         billing_period_start_date: str = billing_options.get("currentBillingPeriodStartDate", "1970-01-01")
         billing_period_end_date: str = billing_options.get("currentBillingPeriodEndDate", "1970-01-01")
-        current_start = self._parse_billing_date(billing_period_start_date)
+        current_start = self._parse_billing_date(billing_period_start_date) - relativedelta(days=1)
         
         current_end: datetime
 
         if billing_period_end_date is None:
-            current_end = self._parse_billing_date(next_billing_date, end_of_day=True) - relativedelta(days=1)
+            current_end = self._parse_billing_date(next_billing_date, end_of_day=True) - relativedelta(days=2)
             billing_period_end_date = current_end.strftime("%Y-%m-%d")
         else:  
             current_end = self._parse_billing_date(
@@ -919,7 +919,7 @@ class PowershopApiClient:
                 },
                 "string":{
                     "next_billing_date": next_billing_date, 
-                    "billing_period_start_date": billing_period_start_date,
+                    "billing_period_start_date": current_start.strftime("%Y-%m-%d"),
                     "billing_period_end_date": billing_period_end_date,
                 }
             },
