@@ -1,5 +1,8 @@
 ## Releases
 
+### v1.0.21
+- a quick hack to fix the billing dates
+
 ### v1.0.20
 - don't crash when the API fails to return actuall end billing date
 
