@@ -326,7 +326,7 @@ class PowershopCoordinator(
             if not self._last_api_call or self._last_api_call + timedelta(seconds=DEFAULT_API_CALL_INTERVAL) < now:
                 
                 _LOGGER.debug("Calling the API")
-                
+
                 #get powerpack balances, if they changed - get powerpacks as well
                 powerpacks_balances = await self._api_client.get_powerpacks_balances(
                     self._account_id

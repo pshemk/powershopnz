@@ -153,6 +153,28 @@ query Account($accountNumber: String!) {
 }
 
 """
+
+QUERY_CHARGING_PERIODS = """
+query GetBillingPeriods($accountNumber: String!) {
+  account(accountNumber: $accountNumber) {
+    id
+    agreements {
+      id
+      isActive
+      chargingPeriods(first: 2) {
+        edges {
+          node {
+            fromDate
+            toDate
+            isReversed
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
 QUERY_POWERPACK_BALANCES = """
 query VouchersBalanceDetail($accountNumber: ID!) {
     vouchersBalanceDetail(accountNumber: $accountNumber) {
@@ -877,50 +899,51 @@ class PowershopApiClient:
             "last_usage_date": self._billing_day_start(last_timestamp) if last_timestamp else self._billing_day_start(start_on)
         }
 
-    def _parse_billing_date(self, value: str, *, end_of_day: bool = False) -> datetime:
-        """Parse a Powershop billing date in the integration timezone."""
-        parsed = datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=TIMEZONE)
-        if end_of_day:
-            parsed = parsed.replace(hour=23, minute=59, second=59)
-        return parsed
-
     async def get_billing_dates(self, account_id: str) -> BillingDates:
-        billing_dates_data: dict[str, Any] = await self._run_query(
-            QUERY_BILLING_DATES, {"accountNumber": account_id}
+        billing_periods_data: dict[str, Any] = await self._run_query(
+            QUERY_CHARGING_PERIODS, {"accountNumber": account_id}
         )        
 
-        _LOGGER.debug(f"billing_dates_data: {billing_dates_data}")
+        # _LOGGER.debug(f"billing_periods_data: {billing_periods_data}")
 
-        account = billing_dates_data.get("account") or {}
-        billing_options = account.get("billingOptions") or {}
-        next_billing_date: str = billing_options.get("nextBillingDate", "1970-01-01")
-        billing_period_start_date: str = billing_options.get("currentBillingPeriodStartDate", "1970-01-01")
-        billing_period_end_date: str = billing_options.get("currentBillingPeriodEndDate", "1970-01-01")
-        current_start = self._parse_billing_date(billing_period_start_date) - relativedelta(days=1)
+        account = billing_periods_data.get("account") or {}
+        agreement = account.get("agreements")[0] if account.get("agreements") else {}
+        charging_periods = agreement.get("chargingPeriods", {}).get("edges", [])
+
+        if not charging_periods or len(charging_periods) == 0:
+            raise ValueError("No charging periods found for account")   
         
-        current_end: datetime
+        # First charging period is the current one, second is the previous one
+        current_period = charging_periods[0]["node"]
+        previous_period = charging_periods[1]["node"] if len(charging_periods) > 1 else None 
 
-        if billing_period_end_date is None:
-            current_end = self._parse_billing_date(next_billing_date, end_of_day=True) - relativedelta(days=2)
-            billing_period_end_date = current_end.strftime("%Y-%m-%d")
-        else:  
-            current_end = self._parse_billing_date(
-                billing_period_end_date, end_of_day=True
-            )
-        _LOGGER.debug(f"current_start: {current_start}, current_end: {current_end}")
+        # _LOGGER.debug(f"current_period: {current_period}, previous_period: {previous_period}")
+
+
+        current_start = datetime.fromisoformat(current_period["fromDate"]).replace(tzinfo=TIMEZONE, hour=0, minute=0, second=0) + relativedelta(days=1)
+        current_end = datetime.fromisoformat(current_period["toDate"]).replace(tzinfo=TIMEZONE, hour=23, minute=59, second=59) - relativedelta(days=1)
+        next_billing_date = datetime.fromisoformat(current_period["toDate"]).replace(tzinfo=TIMEZONE) + relativedelta(days=1)
+
+        #Previous period seems to be completely wrong, so just subtracting a month from the current one for now
+        # previous_start = datetime.fromisoformat(previous_period["fromDate"]).replace(tzinfo=TIMEZONE, hour=0, minute=0, second=0) if previous_period else None
+        # previous_end = datetime.fromisoformat(previous_period["toDate"]).replace(tzinfo=TIMEZONE, hour=23, minute=59, second=59) - relativedelta(days=1) if previous_period else None
+
         previous_start = current_start - relativedelta(months=1)
         previous_end = current_end - relativedelta(months=1)
+
+        # _LOGGER.debug(f"current_start: {current_start}, current_end: {current_end}, next_billing_date: {next_billing_date}, previous_start: {previous_start}, previous_end: {previous_end}")
+    
         return {
              "current": {
                 "datetime": {
-                    "next_billing_date": self._parse_billing_date(next_billing_date),
+                    "next_billing_date": next_billing_date,
                     "billing_period_start_date": current_start,
                     "billing_period_end_date": current_end,
                 },
                 "string":{
-                    "next_billing_date": next_billing_date, 
+                    "next_billing_date": next_billing_date.strftime("%Y-%m-%d"), 
                     "billing_period_start_date": current_start.strftime("%Y-%m-%d"),
-                    "billing_period_end_date": billing_period_end_date,
+                    "billing_period_end_date": current_end.strftime("%Y-%m-%d"),
                 }
             },
              "previous": {
