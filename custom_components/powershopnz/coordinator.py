@@ -539,6 +539,12 @@ class PowershopCoordinator(
                 # _LOGGER.debug("Full data downloaded, scheduling usage processing")
                 await self._schedule_usage_process()
             else:
+                #check if we have yesterday's data already
+                _LOGGER.debug("Last usage date: %s -> %s", datetime.strptime(self._stores["state"].data.get("last_usage_date"), "%Y-%m-%d").strftime("%Y-%m-%d"), datetime.now().strftime("%Y-%m-%d"))
+                if datetime.strptime(self._stores["state"].data.get("last_usage_date"), "%Y-%m-%d").strftime("%Y-%m-%d") == datetime.now().strftime("%Y-%m-%d"):
+                    _LOGGER.debug("Usage data is already up to date")
+                    return
+
                 #only fetch new data (4 days earlier than last recorded, to allow for filling in the gaps)
                 last_usage_date = (datetime.strptime(self._stores["state"].data.get("last_usage_date"), "%Y-%m-%d") - timedelta(days=4)).strftime("%Y-%m-%d")
                 _LOGGER.debug("Fetching usage data after %s", last_usage_date)
@@ -546,21 +552,25 @@ class PowershopCoordinator(
                     self._account_id, self._property_id, last_usage_date
                 )
                 if usage["usage"]:
-                    await self._stores["usage"].async_save({
-                        **self._stores["usage"].data,
-                        **usage["usage"],
-                        })
+                    #protect against incomplete data being returned, we always should have either 4 or 5 days of data, with 48 records per day
+                    if len(usage["usage"]) != 48 * 4 and len(usage["usage"]) != 48 * 5:
+                        _LOGGER.warning("Unexpected number of usage records received: %d", len(usage["usage"]))
+                    else:
+                        await self._stores["usage"].async_save({
+                            **self._stores["usage"].data,
+                            **usage["usage"],
+                            })
 
-                    #check if we actually got any new data
-                    # _LOGGER.debug(f"last_usage_date: {self._stores['state'].data.get('last_usage_date')} new last_usage_date: {usage['last_usage_date']}")
-                    if usage["last_usage_date"] != self._stores["state"].data.get("last_usage_date"):
-                        # _LOGGER.debug("Updated usage data, scheduling usage processing")
-                        await self._schedule_usage_process()
+                        #check if we actually got any new data
+                        # _LOGGER.debug(f"last_usage_date: {self._stores['state'].data.get('last_usage_date')} new last_usage_date: {usage['last_usage_date']}")
+                        if usage["last_usage_date"] != self._stores["state"].data.get("last_usage_date"):
+                            # _LOGGER.debug("Updated usage data, scheduling usage processing")
+                            await self._schedule_usage_process()
 
-                        await self._stores["state"].async_save({
-                            **self._stores["state"].data,
-                            "last_usage_date": usage["last_usage_date"]
-                        })
+                            await self._stores["state"].async_save({
+                                **self._stores["state"].data,
+                                "last_usage_date": usage["last_usage_date"]
+                            })
             _LOGGER.debug("Usage synchronised")
 
         except asyncio.CancelledError:
