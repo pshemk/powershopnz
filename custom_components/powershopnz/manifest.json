@@ -1,6 +1,9 @@
 {
   "domain": "powershopnz",
   "name": "Powershop NZ",
+  "categories": [
+    "energy.meters_monitoring", "energy.energy_prices" 
+  ],
   "codeowners": ["@pshemk"],
   "config_flow": true,
   "dependencies": [
