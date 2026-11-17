@@ -1,5 +1,10 @@
 ## Releases
 
+### v1.0.22
+- start using the billing period API
+- check if usage data received is complete to avoid gaps in the graphs
+- stop checking for new usage data if previous day data has been received
+
 ### v1.0.21
 - a quick hack to fix the billing dates
 
