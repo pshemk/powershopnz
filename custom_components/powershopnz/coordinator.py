@@ -539,6 +539,12 @@ class PowershopCoordinator(
                 # _LOGGER.debug("Full data downloaded, scheduling usage processing")
                 await self._schedule_usage_process()
             else:
+                #check if we have yesterday's data already
+                _LOGGER.debug("Last usage date: %s -> %s", datetime.strptime(self._stores["state"].data.get("last_usage_date"), "%Y-%m-%d").strftime("%Y-%m-%d"), datetime.now().strftime("%Y-%m-%d"))
+                if datetime.strptime(self._stores["state"].data.get("last_usage_date"), "%Y-%m-%d").strftime("%Y-%m-%d") == datetime.now().strftime("%Y-%m-%d"):
+                    _LOGGER.debug("Usage data is already up to date")
+                    return
+
                 #only fetch new data (4 days earlier than last recorded, to allow for filling in the gaps)
                 last_usage_date = (datetime.strptime(self._stores["state"].data.get("last_usage_date"), "%Y-%m-%d") - timedelta(days=4)).strftime("%Y-%m-%d")
                 _LOGGER.debug("Fetching usage data after %s", last_usage_date)
